@@ -43,7 +43,7 @@ router.get('/', async (req, res, next) => {
         select: {
           id: true, title: true, description: true, date: true,
           location: true, price: true, totalSeats: true,
-          availableSeats: true, imageUrl: true
+          availableSeats: true, imageUrl: true, videoUrl: true
         }
       }),
       prisma.event.count({ where })
@@ -63,11 +63,11 @@ router.get('/:id', async (req, res, next) => {
     const prisma = req.app.locals.prisma;
     const event = await prisma.event.findUnique({
       where: { id: req.params.id },
-      select: {
-        id: true, title: true, description: true, date: true,
-        location: true, price: true, totalSeats: true,
-        availableSeats: true, imageUrl: true, createdAt: true
-      }
+        select: {
+          id: true, title: true, description: true, date: true,
+          location: true, price: true, totalSeats: true,
+          availableSeats: true, imageUrl: true, videoUrl: true, createdAt: true
+        }
     });
 
     if (!event) {
@@ -82,7 +82,7 @@ router.get('/:id', async (req, res, next) => {
 
 router.post('/', authenticate, requireAdmin, async (req, res, next) => {
   try {
-    const { title, description, date, location, price, totalSeats, imageUrl } = req.body;
+    const { title, description, date, location, price, totalSeats, imageUrl, videoUrl } = req.body;
     const prisma = req.app.locals.prisma;
 
     if (!title || !description || !date || !location || !price || !totalSeats) {
@@ -93,7 +93,7 @@ router.post('/', authenticate, requireAdmin, async (req, res, next) => {
       data: {
         title, description, date: new Date(date), location,
         price: Number(price), totalSeats: Number(totalSeats),
-        availableSeats: Number(totalSeats), imageUrl
+        availableSeats: Number(totalSeats), imageUrl, videoUrl
       }
     });
 
@@ -108,7 +108,7 @@ router.post('/', authenticate, requireAdmin, async (req, res, next) => {
 router.put('/:id', authenticate, requireAdmin, async (req, res, next) => {
   try {
     const { id } = req.params;
-    const { title, description, date, location, price, totalSeats, imageUrl } = req.body;
+    const { title, description, date, location, price, totalSeats, imageUrl, videoUrl } = req.body;
     const prisma = req.app.locals.prisma;
 
     const event = await prisma.event.update({
@@ -120,7 +120,8 @@ router.put('/:id', authenticate, requireAdmin, async (req, res, next) => {
         ...(location && { location }),
         ...(price && { price: Number(price) }),
         ...(totalSeats && { totalSeats: Number(totalSeats) }),
-        ...(imageUrl && { imageUrl })
+        ...(imageUrl && { imageUrl }),
+        ...(videoUrl && { videoUrl })
       }
     });
 

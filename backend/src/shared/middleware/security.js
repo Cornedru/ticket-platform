@@ -26,8 +26,9 @@ export const securityMiddleware = [
         defaultSrc: ["'self'"],
         scriptSrc: ["'self'", "'unsafe-inline'"],
         styleSrc: ["'self'", "'unsafe-inline'"],
-        imgSrc: ["'self'", "data:", "blob:"],
-        connectSrc: ["'self'", process.env.API_URL || 'http://localhost:3000'],
+        imgSrc: ["'self'", "data:", "blob:", "https://assets.mixkit.co"],
+        mediaSrc: ["'self'", "https://assets.mixkit.co"],
+        connectSrc: ["'self'", "http://localhost:3000", "http://localhost:8081"],
       }
     },
     hsts: {
@@ -40,7 +41,7 @@ export const securityMiddleware = [
   cors({
     origin: process.env.NODE_ENV === 'production'
       ? (process.env.ALLOWED_ORIGINS || '').split(',')
-      : ['http://localhost:3000', 'http://localhost:5173'],
+      : ['http://localhost:3000', 'http://localhost:5173', 'http://localhost:8081'],
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'],
     allowedHeaders: ['Content-Type', 'Authorization']

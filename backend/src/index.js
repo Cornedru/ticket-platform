@@ -42,7 +42,7 @@ app.use(helmet({
 app.use(cors({
   origin: process.env.NODE_ENV === 'production'
     ? (process.env.ALLOWED_ORIGINS || '').split(',')
-    : ['http://localhost:3000', 'http://localhost:5173'],
+    : ['http://localhost:3000', 'http://localhost:5173', 'http://localhost:8081'],
   credentials: true
 }));
 
@@ -84,11 +84,11 @@ async function seedDatabase() {
       console.log('✅ Admin created');
 
       const events = [
-        { title: 'Concert Rock Stars', description: 'Le plus grand concert de rock', date: new Date('2026-06-15T20:00:00'), location: 'Stade de France, Paris', price: 89.99, totalSeats: 5000, availableSeats: 5000 },
-        { title: 'Festival de Jazz', description: '3 jours de jazz en plein air', date: new Date('2026-07-20T18:00:00'), location: 'Parc de la Villette, Paris', price: 150.00, totalSeats: 2000, availableSeats: 2000 },
-        { title: 'Match de Football', description: 'PSG vs Olympique de Marseille', date: new Date('2026-03-10T21:00:00'), location: 'Parc des Princes, Paris', price: 120.00, totalSeats: 45000, availableSeats: 45000 },
-        { title: 'Théâtre: Le Roi Lion', description: 'Comédie musicale Disney', date: new Date('2026-04-05T19:30:00'), location: 'Théâtre Mogador, Paris', price: 95.00, totalSeats: 1800, availableSeats: 1800 },
-        { title: 'Conference Tech 2026', description: 'Conférence technologique française', date: new Date('2026-05-22T09:00:00'), location: 'Palais des Congrès, Lyon', price: 299.00, totalSeats: 3000, availableSeats: 3000 }
+        { title: 'Concert Rock Stars', description: 'Le plus grand concert de rock de lannée', date: new Date('2026-06-15T20:00:00'), location: 'Stade de France, Paris', price: 89.99, totalSeats: 5000, availableSeats: 5000, videoUrl: 'https://assets.mixkit.co/videos/preview/mixkit-concert-crowd-cheering-and-flashing-lights-4399-large.mp4' },
+        { title: 'Festival de Jazz', description: '3 jours de jazz en plein air', date: new Date('2026-07-20T18:00:00'), location: 'Parc de la Villette, Paris', price: 150.00, totalSeats: 2000, availableSeats: 2000, videoUrl: 'https://assets.mixkit.co/videos/preview/mixkit-dj-playing-music-in-a-club-4038-large.mp4' },
+        { title: 'Match de Football', description: 'PSG vs Olympique de Marseille', date: new Date('2026-03-10T21:00:00'), location: 'Parc des Princes, Paris', price: 120.00, totalSeats: 45000, availableSeats: 45000, videoUrl: 'https://assets.mixkit.co/videos/preview/mixkit-football-stadium-crowd-watching-the-game-4554-large.mp4' },
+        { title: 'Théâtre: Le Roi Lion', description: 'Comédie musicale Disney', date: new Date('2026-04-05T19:30:00'), location: 'Théâtre Mogador, Paris', price: 95.00, totalSeats: 1800, availableSeats: 1800, videoUrl: 'https://assets.mixkit.co/videos/preview/mixkit-spotlights-moving-on-a-stage-32795-large.mp4' },
+        { title: 'Conference Tech 2026', description: 'Conférence technologique française', date: new Date('2026-05-22T09:00:00'), location: 'Palais des Congrès, Lyon', price: 299.00, totalSeats: 3000, availableSeats: 3000, videoUrl: 'https://assets.mixkit.co/videos/preview/mixkit-people-working-in-a-technology-company-4816-large.mp4' }
       ];
 
       for (const event of events) {

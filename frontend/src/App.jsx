@@ -13,10 +13,15 @@ const api = {
       ...(token && { Authorization: `Bearer ${token}` }),
       ...options.headers
     }
-    const response = await fetch(`${API_URL}${endpoint}`, { ...options, headers })
-    const data = await response.json()
-    if (!response.ok) throw new Error(data.error || 'Request failed')
-    return data
+    try {
+      const response = await fetch(`${API_URL}${endpoint}`, { ...options, headers })
+      const data = await response.json()
+      if (!response.ok) throw new Error(data.error || 'Request failed')
+      return data
+    } catch (err) {
+      console.error('API Error:', err)
+      throw err
+    }
   },
   get: (endpoint) => api.request(endpoint),
   post: (endpoint, body) => api.request(endpoint, { method: 'POST', body: JSON.stringify(body) }),
@@ -68,6 +73,18 @@ function useAuth() {
   return useContext(AuthContext)
 }
 
+function VideoBackground({ src }) {
+  if (!src) return null
+  return (
+    <div className="event-video-bg">
+      <video autoPlay loop muted playsInline>
+        <source src={src} type="video/mp4" />
+      </video>
+      <div className="event-video-overlay" />
+    </div>
+  )
+}
+
 function Navbar() {
   const { user, logout } = useAuth()
   const navigate = useNavigate()
@@ -75,7 +92,7 @@ function Navbar() {
   return (
     <nav className="navbar">
       <div className="container">
-        <Link to="/" className="logo">TH</Link>
+        <Link to="/" className="logo glitch-hover">✦ TRIP ✦</Link>
         <div className="nav-links">
           <Link to="/">Événements</Link>
           {user ? (
@@ -105,28 +122,37 @@ function Home() {
 
   useEffect(() => {
     api.get('/api/events?upcoming=true')
-      .then(data => setEvents(data.events))
-      .catch(err => setError(err.message))
+      .then(data => {
+        console.log('Events data:', data)
+        setEvents(data.events || data || [])
+      })
+      .catch(err => {
+        console.error('Error loading events:', err)
+        setError(err.message)
+      })
       .finally(() => setLoading(false))
   }, [])
 
   if (loading) return <div className="loading"><div className="spinner"></div></div>
-  if (error) return <div className="alert alert-error">{error}</div>
+  if (error) return <div className="page"><div className="container"><div className="alert alert-error">Erreur: {error}</div></div></div>
 
   return (
     <div className="page">
       <div className="container">
         <div className="hero">
           <div className="hero-content">
-            <h1>Événements Exclusifs</h1>
-            <p className="hero-subtitle">Accédez aux expériences les plus attendues de l'année</p>
+            <h1>VOYAGE SENSORIEL</h1>
+            <p className="hero-subtitle">Plonge dans des expériences hallucinantes - Prix hallucinants</p>
+            <Link to="/#events" className="btn btn-primary">
+              <span>Explorer les维度</span>
+            </Link>
           </div>
         </div>
         
-        <h2 className="page-title">À Venir</h2>
+        <h2 className="page-title" style={{ textAlign: 'center', marginBottom: '48px' }}>À Venir</h2>
         
         {events.length === 0 ? (
-          <p className="text-center text-muted">Aucun événement disponible</p>
+          <p className="text-center text-muted">Aucun événement disponible - Reviens plus tard</p>
         ) : (
           <div className="grid grid-3">
             {events.map(event => (
@@ -141,10 +167,24 @@ function Home() {
 
 function EventCard({ event }) {
   const navigate = useNavigate()
+  const videoSample = 'https://assets.mixkit.co/videos/preview/mixkit-abstract-video-of-a-futuristic-interface-32664-large.mp4'
 
   return (
-    <div className="card">
+    <div className="card glitch-hover" onClick={() => navigate(`/event/${event.id}`)} style={{ cursor: 'pointer' }}>
       <div className="card-image">
+        {event.videoUrl ? (
+          <video 
+            autoPlay 
+            loop 
+            muted 
+            playsInline 
+            className="card-video"
+            style={{ position: 'absolute', width: '100%', height: '100%', objectFit: 'cover' }}
+          >
+            <source src={event.videoUrl} type="video/mp4" />
+          </video>
+        ) : null}
+        <div className="card-image-overlay" />
         <span className="icon">✦</span>
       </div>
       <div className="card-body">
@@ -158,7 +198,7 @@ function EventCard({ event }) {
           <span className="seats">{event.availableSeats} places</span>
         </div>
         <button className="btn mt-2" style={{ width: '100%' }} onClick={() => navigate(`/event/${event.id}`)}>
-          <span>Réserver</span>
+          <span>Réserver ton trip</span>
         </button>
       </div>
     </div>
@@ -205,18 +245,21 @@ function EventDetail() {
   if (error) return <div className="page"><div className="container"><div className="alert alert-error">{error}</div></div></div>
   if (!event) return <div className="page"><div className="container"><div className="alert alert-error">Événement non trouvé</div></div></div>
 
+  const videoBg = event.videoUrl || 'https://assets.mixkit.co/videos/preview/mixkit-abstract-video-of-a-futuristic-interface-32664-large.mp4'
+
   if (order) {
     return (
       <div className="page">
+        <VideoBackground src={videoBg} />
         <div className="container">
           <div className="alert alert-success mb-3">
-            Commande confirmée ! Vos billets ont été générés.
+            Commande confirmée ! Tes billets ont été générés.
           </div>
           <div className="card">
             <div className="card-body">
-              <h2 className="mb-2">Vos Billets</h2>
+              <h2 className="mb-2">Tes Billets</h2>
               {order.tickets.map((ticket, i) => (
-                <div key={ticket.id} className="mb-2" style={{ borderBottom: '1px solid var(--border)', paddingBottom: '1rem' }}>
+                <div key={ticket.id} className="mb-2" style={{ borderBottom: '1px solid var(--glass-border)', paddingBottom: '1rem' }}>
                   <p><strong>Billet #{i + 1}</strong></p>
                   <img src={ticket.qrCode} alt="QR Code" className="qr-code" />
                 </div>
@@ -231,8 +274,9 @@ function EventDetail() {
 
   return (
     <div className="page">
+      <VideoBackground src={videoBg} />
       <div className="container">
-        <div className="card">
+        <div className="card" style={{ backdropFilter: 'blur(20px)', background: 'rgba(255,255,255,0.05)' }}>
           <div className="card-body">
             <h1 className="page-title">{event.title}</h1>
             <p className="card-text mb-2">{event.description}</p>
@@ -398,7 +442,7 @@ function Orders() {
                     <div>
                       <h3>{order.event.title}</h3>
                       <p className="card-text text-muted">{new Date(order.event.date).toLocaleDateString('fr-FR')}</p>
-                      <p className="card-text">{order.event.location}</p>
+                      <p className="card-text text-muted">{order.event.location}</p>
                       <p>Quantité: {order.quantity}</p>
                       <p>Total: <strong>{order.totalPrice.toFixed(2)} €</strong></p>
                     </div>
@@ -462,7 +506,7 @@ function Admin() {
   const [orders, setOrders] = useState([])
   const [activeTab, setActiveTab] = useState('events')
   const [showEventForm, setShowEventForm] = useState(false)
-  const [formData, setFormData] = useState({ title: '', description: '', date: '', location: '', price: '', totalSeats: '' })
+  const [formData, setFormData] = useState({ title: '', description: '', date: '', location: '', price: '', totalSeats: '', videoUrl: '' })
   const { user } = useAuth()
 
   useEffect(() => {
@@ -478,7 +522,7 @@ function Admin() {
     try {
       await api.post('/api/events', formData)
       setShowEventForm(false)
-      setFormData({ title: '', description: '', date: '', location: '', price: '', totalSeats: '' })
+      setFormData({ title: '', description: '', date: '', location: '', price: '', totalSeats: '', videoUrl: '' })
       const data = await api.get('/api/events')
       setEvents(data.events)
     } catch (err) {
@@ -523,6 +567,10 @@ function Admin() {
                     <div className="form-group">
                       <label className="form-label">Description</label>
                       <textarea value={formData.description} onChange={e => setFormData({...formData, description: e.target.value})} className="form-input" required />
+                    </div>
+                    <div className="form-group">
+                      <label className="form-label">URL Vidéo (background)</label>
+                      <input type="url" value={formData.videoUrl} onChange={e => setFormData({...formData, videoUrl: e.target.value})} className="form-input" placeholder="https://..." />
                     </div>
                     <div className="grid grid-2">
                       <div className="form-group">

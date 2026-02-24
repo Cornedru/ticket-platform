@@ -7,10 +7,12 @@ services:
   postgres:
     image: postgres:15-alpine
     container_name: ticket-platform-db
+    env_file:
+      - .env
     environment:
-      POSTGRES_USER: ${POSTGRES_USER:-ticket_user}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-ticket_pass}
-      POSTGRES_DB: ${POSTGRES_DB:-ticket_platform}
+      POSTGRES_USER: ticket_user
+      POSTGRES_PASSWORD: ticket_pass
+      POSTGRES_DB: ticket_platform
     volumes:
       - postgres_data:/var/lib/postgresql/data
     networks:
@@ -48,10 +50,12 @@ services:
       context: ./backend
       dockerfile: Dockerfile
     container_name: ticket-platform-backend
+    env_file:
+      - .env
     environment:
-      NODE_ENV: ${NODE_ENV:-production}
-      DATABASE_URL: postgresql://${POSTGRES_USER:-ticket_user}:${POSTGRES_PASSWORD:-ticket_pass}@postgres:5432/${POSTGRES_DB:-ticket_platform}?schema=public&pool=20&connection_limit=20
-      
+      NODE_ENV: production
+      DATABASE_URL: postgresql://ticket_user:ticket_pass@postgres:5432/ticket_platform?schema=public&pool=20&connection_limit=20
+       
       # Auth
       JWT_SECRET: ${JWT_SECRET:-change_this_in_production}
       JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-7d}
@@ -111,7 +115,7 @@ services:
         VITE_API_URL: ${VITE_API_URL:-}
     container_name: ticket-platform-frontend
     ports:
-      - "${FRONTEND_PORT:-3000}:80"
+      - "8081:80"
     depends_on:
       - backend
     networks:
