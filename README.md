@@ -1,6 +1,6 @@
-# 🎫 Ticket Platform - Plateforme de réservation de billets
+# 🎫 TicketHub - Plateforme de Réservation de Billets
 
-## 🚀 Lancement rapide
+## 🚀 Lancement Rapide
 
 ```bash
 cd ticket-platform
@@ -10,24 +10,53 @@ docker-compose up --build
 L'application sera disponible sur :
 - **Frontend**: http://localhost:3000
 - **Backend API**: http://localhost:5000
+- **Prometheus**: http://localhost:9090 (optionnel)
+- **Grafana**: http://localhost:3001 (optionnel)
 
 ---
 
-## 📋 Configuration
+## 🔧 Configuration
 
-### Variables d'environnement (.env)
+### Variables d'environnement
 
 ```env
+# Base de données
 POSTGRES_USER=ticket_user
 POSTGRES_PASSWORD=ticket_pass
 POSTGRES_DB=ticket_platform
 
+# Auth
 JWT_SECRET=votre-secret-jwt
 JWT_EXPIRES_IN=7d
 
+# Redis (optionnel)
+REDIS_URL=redis://localhost:6379
+
+# Stripe (optionnel)
+STRIPE_SECRET_KEY=sk_test_xxx
+STRIPE_WEBHOOK_SECRET=whsec_xxx
+ALLOWED_ORIGINS=https://votre-domaine.com
+
+# Ports
 BACKEND_PORT=5000
 FRONTEND_PORT=3000
 ```
+
+---
+
+## 📦 Stack Technique
+
+| Composant | Technologie |
+|-----------|-------------|
+| Backend | Node.js + Express |
+| Base de données | PostgreSQL + Prisma |
+| Cache | Redis (optionnel) |
+| Paiements | Stripe (optionnel) |
+| Frontend | React + Vite |
+| Reverse proxy | Nginx |
+| Container | Docker + Docker Compose |
+| CI/CD | GitHub Actions |
+| Monitoring | Prometheus + Grafana |
 
 ---
 
@@ -37,25 +66,24 @@ FRONTEND_PORT=3000
 ticket-platform/
 ├── backend/
 │   ├── src/
-│   │   ├── controllers/    # Logique métier
-│   │   ├── middleware/      # Auth, erreurs
-│   │   ├── routes/         # Routes API
-│   │   └── index.js        # Point d'entrée
+│   │   ├── modules/          # Modules fonctionnels
+│   │   │   ├── auth/
+│   │   │   ├── events/
+│   │   │   ├── orders/
+│   │   │   ├── tickets/
+│   │   │   └── payment/
+│   │   └── shared/
+│   │       └── middleware/    # Cache, security
 │   ├── prisma/
-│   │   └── schema.prisma   # Schéma BD
-│   ├── Dockerfile
-│   └── package.json
+│   └── Dockerfile
 ├── frontend/
 │   ├── src/
-│   │   ├── App.jsx         # Application React
-│   │   └── index.css       # Styles
 │   ├── nginx.conf
-│   ├── Dockerfile
-│   └── package.json
-├── nginx/
-│   └── default.conf
+│   └── Dockerfile
+├── .github/workflows/         # CI/CD
 ├── docker-compose.yml
-└── .env
+├── docker-compose.monitoring.yml
+└── prometheus.yml
 ```
 
 ---
@@ -76,7 +104,7 @@ ticket-platform/
 
 ### Commandes
 - `POST /api/orders` - Créer commande
-- `POST /api/orders/:id/pay` - Paiement (mock)
+- `POST /api/orders/:id/pay` - Paiement
 - `GET /api/orders` - Mes commandes
 - `GET /api/orders/all` - Toutes les commandes (admin)
 
@@ -85,16 +113,15 @@ ticket-platform/
 - `GET /api/tickets/:id` - Détail billet
 - `POST /api/tickets/scan/:id` - Scanner billet (admin)
 
+### Webhooks
+- `POST /api/payments/webhook/stripe` - Webhook Stripe
+
 ---
 
-## 👤 Comptes par défaut
+## 👤 Comptes
 
-### Admin
-- Email: admin@ticket.com
-- Mot de passe: admin123
-
-### Utilisateur
-- Créez un compte via l'interface
+- **Admin**: `admin@ticket.com` / `admin123`
+- **User**: Créez un compte via l'interface
 
 ---
 
@@ -102,17 +129,29 @@ ticket-platform/
 
 - ✅ Hash bcrypt des mots de passe
 - ✅ JWT pour l'authentification
-- ✅ Rate limiting (100 req/15min)
+- ✅ Rate limiting intelligent
 - ✅ Helmet pour headers HTTP
+- ✅ CORS strict
 - ✅ Validation des inputs
-- ✅ Protection CORS
+- ✅ Protection CSRF
+- ✅ Webhook Stripe sécurisé
 
 ---
 
-## 🛠️ Commandes utiles
+## 📊 Monitoring
+
+Pour lancer le monitoring :
 
 ```bash
-# Lancer en mode développement
+docker-compose -f docker-compose.monitoring.yml up -d
+```
+
+---
+
+## 🛠️ Commandes Utiles
+
+```bash
+# Lancer l'application
 docker-compose up --build
 
 # Arrêter les conteneurs
@@ -127,10 +166,10 @@ docker-compose build --no-cache
 
 ---
 
-## 📦 Stack technique
+## 🚀 Déploiement Production
 
-- **Backend**: Node.js + Express
-- **Base de données**: PostgreSQL + Prisma
-- **Frontend**: React + Vite
-- **Reverse proxy**: Nginx
-- **Container**: Docker + Docker Compose
+1. Configurer les variables d'environnement
+2. Activer Redis pour le cache
+3. Configurer Stripe pour les paiements
+4. Mettre en place un CDN
+5. Configurer le monitoring

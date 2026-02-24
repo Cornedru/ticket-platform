@@ -26,20 +26,20 @@ enum Role {
 }
 
 model Event {
-  id          String      @id @default(uuid())
-  title       String
-  description String
-  date        DateTime
-  location    String
-  price       Float
-  totalSeats  Int
+  id            String   @id @default(uuid())
+  title         String
+  description   String
+  date          DateTime
+  location      String
+  price         Float
+  totalSeats    Int
   availableSeats Int
-  imageUrl    String?
-  createdAt   DateTime    @default(now())
-  updatedAt   DateTime    @updatedAt
+  imageUrl      String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 
-  tickets     Ticket[]
-  orders      Order[]
+  tickets       Ticket[]
+  orders        Order[]
 }
 
 model Order {

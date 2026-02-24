@@ -1,7 +1,7 @@
 import { BrowserRouter, Routes, Route, Link, Navigate, useNavigate } from 'react-router-dom'
 import { useState, useEffect, createContext, useContext } from 'react'
 
-const API_URL = import.meta.env.VITE_API_URL || ''
+const API_URL = ''
 
 const AuthContext = createContext(null)
 
@@ -13,10 +13,7 @@ const api = {
       ...(token && { Authorization: `Bearer ${token}` }),
       ...options.headers
     }
-    const response = await fetch(`${API_URL}${endpoint}`, {
-      ...options,
-      headers
-    })
+    const response = await fetch(`${API_URL}${endpoint}`, { ...options, headers })
     const data = await response.json()
     if (!response.ok) throw new Error(data.error || 'Request failed')
     return data
@@ -75,29 +72,24 @@ function Navbar() {
   const { user, logout } = useAuth()
   const navigate = useNavigate()
 
-  const handleLogout = () => {
-    logout()
-    navigate('/')
-  }
-
   return (
     <nav className="navbar">
       <div className="container">
-        <Link to="/" className="logo">🎫 TicketHub</Link>
+        <Link to="/" className="logo">TH</Link>
         <div className="nav-links">
           <Link to="/">Événements</Link>
           {user ? (
             <>
-              <Link to="/orders">Mes commandes</Link>
-              <Link to="/tickets">Mes billets</Link>
+              <Link to="/orders">Commandes</Link>
+              <Link to="/tickets">Billetterie</Link>
               {user.role === 'ADMIN' && <Link to="/admin">Admin</Link>}
-              <span>{user.name}</span>
-              <button className="btn btn-outline" onClick={handleLogout}>Déconnexion</button>
+              <span className="text-muted">{user.name}</span>
+              <button className="btn btn-outline" onClick={() => { logout(); navigate('/') }}>Déconnexion</button>
             </>
           ) : (
             <>
               <Link to="/login">Connexion</Link>
-              <Link to="/register" className="btn btn-primary">Inscription</Link>
+              <Link to="/register" className="btn">Inscription</Link>
             </>
           )}
         </div>
@@ -124,9 +116,17 @@ function Home() {
   return (
     <div className="page">
       <div className="container">
-        <h1 className="page-title">Événements à venir</h1>
+        <div className="hero">
+          <div className="hero-content">
+            <h1>Événements Exclusifs</h1>
+            <p className="hero-subtitle">Accédez aux expériences les plus attendues de l'année</p>
+          </div>
+        </div>
+        
+        <h2 className="page-title">À Venir</h2>
+        
         {events.length === 0 ? (
-          <p>Aucun événement disponible</p>
+          <p className="text-center text-muted">Aucun événement disponible</p>
         ) : (
           <div className="grid grid-3">
             {events.map(event => (
@@ -143,21 +143,22 @@ function EventCard({ event }) {
   const navigate = useNavigate()
 
   return (
-    <div className="card event-card">
-      <div className="event-image">🎭</div>
-      <div className="event-details">
+    <div className="card">
+      <div className="card-image">
+        <span className="icon">✦</span>
+      </div>
+      <div className="card-body">
         <h3 className="card-title">{event.title}</h3>
-        <p className="card-text mb-2">{event.description}</p>
-        <p className="event-date">📅 {new Date(event.date).toLocaleDateString('fr-FR', { 
-          weekday: 'long', year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit'
-        })}</p>
-        <p className="card-text">📍 {event.location}</p>
-        <div className="flex-between mt-2">
-          <span className="event-price">{event.price.toFixed(2)} €</span>
-          <span className="card-text">{event.availableSeats} places</span>
+        <p className="card-text">{event.description}</p>
+        <p className="card-text text-muted">
+          {new Date(event.date).toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' })}
+        </p>
+        <div className="card-meta">
+          <span className="price">{event.price.toFixed(2)} €</span>
+          <span className="seats">{event.availableSeats} places</span>
         </div>
-        <button className="btn btn-primary mt-2" style={{ width: '100%' }} onClick={() => navigate(`/event/${event.id}`)}>
-          Réserver
+        <button className="btn mt-2" style={{ width: '100%' }} onClick={() => navigate(`/event/${event.id}`)}>
+          <span>Réserver</span>
         </button>
       </div>
     </div>
@@ -201,28 +202,26 @@ function EventDetail() {
   }
 
   if (loading) return <div className="loading"><div className="spinner"></div></div>
-  if (error) return <div className="alert alert-error">{error}</div>
-  if (!event) return <div className="alert alert-error">Événement non trouvé</div>
+  if (error) return <div className="page"><div className="container"><div className="alert alert-error">{error}</div></div></div>
+  if (!event) return <div className="page"><div className="container"><div className="alert alert-error">Événement non trouvé</div></div></div>
 
   if (order) {
     return (
       <div className="page">
         <div className="container">
           <div className="alert alert-success mb-3">
-            ✅ Commande confirmée ! Vos billets ont été générés.
+            Commande confirmée ! Vos billets ont été générés.
           </div>
           <div className="card">
             <div className="card-body">
-              <h2 className="mb-2">Vos billets</h2>
+              <h2 className="mb-2">Vos Billets</h2>
               {order.tickets.map((ticket, i) => (
                 <div key={ticket.id} className="mb-2" style={{ borderBottom: '1px solid var(--border)', paddingBottom: '1rem' }}>
                   <p><strong>Billet #{i + 1}</strong></p>
                   <img src={ticket.qrCode} alt="QR Code" className="qr-code" />
                 </div>
               ))}
-              <div className="mt-2">
-                <Link to="/tickets" className="btn btn-primary">Voir tous mes billets</Link>
-              </div>
+              <Link to="/tickets" className="btn mt-2">Voir tous mes billets</Link>
             </div>
           </div>
         </div>
@@ -237,19 +236,20 @@ function EventDetail() {
           <div className="card-body">
             <h1 className="page-title">{event.title}</h1>
             <p className="card-text mb-2">{event.description}</p>
-            <p>📅 {new Date(event.date).toLocaleDateString('fr-FR', { 
-              weekday: 'long', year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit'
-            })}</p>
-            <p>📍 {event.location}</p>
-            <p>💺 {event.availableSeats} places disponibles sur {event.totalSeats}</p>
+            <p className="text-muted mb-1">
+              {new Date(event.date).toLocaleDateString('fr-FR', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+            </p>
+            <p className="text-muted mb-1">{event.location}</p>
+            <p className="text-muted mb-3">{event.availableSeats} places disponibles sur {event.totalSeats}</p>
+            
             <div className="flex-between mt-3">
-              <span className="event-price">Prix: {event.price.toFixed(2)} €</span>
+              <span className="price">Prix: {event.price.toFixed(2)} €</span>
             </div>
             
             {event.availableSeats > 0 && (
               <div className="mt-3">
                 <div className="form-group">
-                  <label className="form-label">Nombre de billets:</label>
+                  <label className="form-label">Nombre de billets</label>
                   <input 
                     type="number" 
                     min="1" 
@@ -266,7 +266,7 @@ function EventDetail() {
                   onClick={handleOrder}
                   disabled={processing}
                 >
-                  {processing ? 'Traitement...' : 'Acheter maintenant'}
+                  <span>{processing ? 'Traitement...' : 'Acheter maintenant'}</span>
                 </button>
               </div>
             )}
@@ -297,25 +297,25 @@ function Login() {
 
   return (
     <div className="auth-page">
-      <div className="card">
-        <div className="card-body">
-          <h1 className="text-center mb-3">Connexion</h1>
-          {error && <div className="alert alert-error">{error}</div>}
-          <form onSubmit={handleSubmit}>
-            <div className="form-group">
-              <label className="form-label">Email</label>
-              <input type="email" value={email} onChange={e => setEmail(e.target.value)} className="form-input" required />
-            </div>
-            <div className="form-group">
-              <label className="form-label">Mot de passe</label>
-              <input type="password" value={password} onChange={e => setPassword(e.target.value)} className="form-input" required />
-            </div>
-            <button type="submit" className="btn btn-primary" style={{ width: '100%' }}>Se connecter</button>
-          </form>
-          <p className="text-center mt-2">
-            Pas de compte ? <Link to="/register">S'inscrire</Link>
-          </p>
-        </div>
+      <div className="auth-card">
+        <h1 className="auth-title">Connexion</h1>
+        {error && <div className="alert alert-error">{error}</div>}
+        <form onSubmit={handleSubmit}>
+          <div className="form-group">
+            <label className="form-label">Email</label>
+            <input type="email" value={email} onChange={e => setEmail(e.target.value)} className="form-input" required />
+          </div>
+          <div className="form-group">
+            <label className="form-label">Mot de passe</label>
+            <input type="password" value={password} onChange={e => setPassword(e.target.value)} className="form-input" required />
+          </div>
+          <button type="submit" className="btn btn-primary" style={{ width: '100%' }}>
+            <span>Se connecter</span>
+          </button>
+        </form>
+        <p className="text-center mt-2 text-muted">
+          Pas de compte ? <Link to="/register" className="text-accent">S'inscrire</Link>
+        </p>
       </div>
     </div>
   )
@@ -342,29 +342,29 @@ function Register() {
 
   return (
     <div className="auth-page">
-      <div className="card">
-        <div className="card-body">
-          <h1 className="text-center mb-3">Inscription</h1>
-          {error && <div className="alert alert-error">{error}</div>}
-          <form onSubmit={handleSubmit}>
-            <div className="form-group">
-              <label className="form-label">Nom</label>
-              <input type="text" value={name} onChange={e => setName(e.target.value)} className="form-input" required />
-            </div>
-            <div className="form-group">
-              <label className="form-label">Email</label>
-              <input type="email" value={email} onChange={e => setEmail(e.target.value)} className="form-input" required />
-            </div>
-            <div className="form-group">
-              <label className="form-label">Mot de passe</label>
-              <input type="password" value={password} onChange={e => setPassword(e.target.value)} className="form-input" minLength={6} required />
-            </div>
-            <button type="submit" className="btn btn-primary" style={{ width: '100%' }}>S'inscrire</button>
-          </form>
-          <p className="text-center mt-2">
-            Déjà un compte ? <Link to="/login">Se connecter</Link>
-          </p>
-        </div>
+      <div className="auth-card">
+        <h1 className="auth-title">Inscription</h1>
+        {error && <div className="alert alert-error">{error}</div>}
+        <form onSubmit={handleSubmit}>
+          <div className="form-group">
+            <label className="form-label">Nom</label>
+            <input type="text" value={name} onChange={e => setName(e.target.value)} className="form-input" required />
+          </div>
+          <div className="form-group">
+            <label className="form-label">Email</label>
+            <input type="email" value={email} onChange={e => setEmail(e.target.value)} className="form-input" required />
+          </div>
+          <div className="form-group">
+            <label className="form-label">Mot de passe</label>
+            <input type="password" value={password} onChange={e => setPassword(e.target.value)} className="form-input" minLength={6} required />
+          </div>
+          <button type="submit" className="btn btn-primary" style={{ width: '100%' }}>
+            <span>S'inscrire</span>
+          </button>
+        </form>
+        <p className="text-center mt-2 text-muted">
+          Déjà un compte ? <Link to="/login" className="text-accent">Se connecter</Link>
+        </p>
       </div>
     </div>
   )
@@ -386,9 +386,9 @@ function Orders() {
   return (
     <div className="page">
       <div className="container">
-        <h1 className="page-title">Mes commandes</h1>
+        <h1 className="page-title">Mes Commandes</h1>
         {orders.length === 0 ? (
-          <p>Aucune commande</p>
+          <p className="text-center text-muted">Aucune commande</p>
         ) : (
           <div className="grid gap-2">
             {orders.map(order => (
@@ -397,8 +397,8 @@ function Orders() {
                   <div className="flex-between">
                     <div>
                       <h3>{order.event.title}</h3>
-                      <p className="card-text">📅 {new Date(order.event.date).toLocaleDateString('fr-FR')}</p>
-                      <p className="card-text">📍 {order.event.location}</p>
+                      <p className="card-text text-muted">{new Date(order.event.date).toLocaleDateString('fr-FR')}</p>
+                      <p className="card-text">{order.event.location}</p>
                       <p>Quantité: {order.quantity}</p>
                       <p>Total: <strong>{order.totalPrice.toFixed(2)} €</strong></p>
                     </div>
@@ -419,7 +419,6 @@ function Orders() {
 function Tickets() {
   const [tickets, setTickets] = useState([])
   const [loading, setLoading] = useState(true)
-  const [selectedTicket, setSelectedTicket] = useState(null)
 
   useEffect(() => {
     api.get('/api/tickets')
@@ -433,18 +432,18 @@ function Tickets() {
   return (
     <div className="page">
       <div className="container">
-        <h1 className="page-title">Mes billets</h1>
+        <h1 className="page-title">Mes Billets</h1>
         {tickets.length === 0 ? (
-          <p>Aucun billet</p>
+          <p className="text-center text-muted">Aucun billet</p>
         ) : (
           <div className="grid grid-2">
             {tickets.map(ticket => (
               <div key={ticket.id} className="card">
                 <div className="card-body text-center">
                   <h3>{ticket.event.title}</h3>
-                  <p className="card-text">{new Date(ticket.event.date).toLocaleDateString('fr-FR')}</p>
-                  <p className="card-text">{ticket.event.location}</p>
-                  <img src={ticket.qrCode} alt="QR Code" className="qr-code mt-2" style={{ maxWidth: '180px' }} />
+                  <p className="card-text text-muted">{new Date(ticket.event.date).toLocaleDateString('fr-FR')}</p>
+                  <p className="card-text text-muted">{ticket.event.location}</p>
+                  <img src={ticket.qrCode} alt="QR Code" className="qr-code mt-2" />
                   <p className={`badge mt-2 ${ticket.scanned ? 'badge-danger' : 'badge-success'}`}>
                     {ticket.scanned ? 'Utilisé' : 'Valide'}
                   </p>
@@ -503,8 +502,8 @@ function Admin() {
 
         {activeTab === 'events' && (
           <>
-            <button className="btn btn-primary mb-3" onClick={() => setShowEventForm(!showEventForm)}>
-              {showEventForm ? 'Annuler' : '+ Nouvel événement'}
+            <button className="btn mb-3" onClick={() => setShowEventForm(!showEventForm)}>
+              <span>{showEventForm ? 'Annuler' : '+ Nouvel événement'}</span>
             </button>
             
             {showEventForm && (
@@ -539,7 +538,7 @@ function Admin() {
                       <label className="form-label">Places totales</label>
                       <input type="number" value={formData.totalSeats} onChange={e => setFormData({...formData, totalSeats: e.target.value})} className="form-input" required />
                     </div>
-                    <button type="submit" className="btn btn-success">Créer l'événement</button>
+                    <button type="submit" className="btn btn-primary"><span>Créer l'événement</span></button>
                   </form>
                 </div>
               </div>
@@ -585,7 +584,7 @@ function Admin() {
               <tbody>
                 {orders.map(order => (
                   <tr key={order.id}>
-                    <td>{order.user?.name}<br/><small>{order.user?.email}</small></td>
+                    <td>{order.user?.name}<br/><small className="text-muted">{order.user?.email}</small></td>
                     <td>{order.event?.title}</td>
                     <td>{order.quantity}</td>
                     <td>{order.totalPrice.toFixed(2)} €</td>

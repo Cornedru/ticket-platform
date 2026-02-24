@@ -6,17 +6,63 @@ import dotenv from 'dotenv';
 import { PrismaClient } from '@prisma/client';
 import bcrypt from 'bcryptjs';
 
-import authRoutes from './routes/auth.js';
-import eventRoutes from './routes/events.js';
-import orderRoutes from './routes/orders.js';
-import ticketRoutes from './routes/tickets.js';
-import { errorHandler } from './middleware/errorHandler.js';
+import authRoutes from './modules/auth/auth.routes.js';
+import eventRoutes from './modules/events/events.routes.js';
+import orderRoutes from './modules/orders/orders.routes.js';
+import ticketRoutes from './modules/tickets/tickets.routes.js';
+import paymentRoutes from './modules/payment/payment.routes.js';
+import { errorHandler } from './shared/middleware/errorHandler.js';
+import { securityMiddleware, rateLimiters } from './shared/middleware/security.js';
+import { cacheMiddleware } from './shared/middleware/cache.js';
 
 dotenv.config();
 
 const app = express();
 const prisma = new PrismaClient();
 const PORT = process.env.PORT || 5000;
+
+app.locals.prisma = prisma;
+
+app.use(helmet({
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      scriptSrc: ["'self'", "'unsafe-inline'"],
+      styleSrc: ["'self'", "'unsafe-inline'"],
+      imgSrc: ["'self'", "data:", "blob:"],
+    }
+  },
+  hsts: {
+    maxAge: 31536000,
+    includeSubDomains: true,
+    preload: true
+  }
+}));
+
+app.use(cors({
+  origin: process.env.NODE_ENV === 'production'
+    ? (process.env.ALLOWED_ORIGINS || '').split(',')
+    : ['http://localhost:3000', 'http://localhost:5173'],
+  credentials: true
+}));
+
+app.use(express.json());
+
+app.use('/api', rateLimiters.api);
+app.use('/api/auth', rateLimiters.auth);
+app.use('/api/orders', rateLimiters.payment);
+
+app.use('/api/auth', authRoutes);
+app.use('/api/events', eventRoutes);
+app.use('/api/orders', orderRoutes);
+app.use('/api/tickets', ticketRoutes);
+app.use('/api/payments', paymentRoutes);
+
+app.get('/api/health', (req, res) => {
+  res.json({ status: 'ok', timestamp: new Date().toISOString() });
+});
+
+app.use(errorHandler);
 
 async function seedDatabase() {
   try {
@@ -56,35 +102,6 @@ async function seedDatabase() {
     console.log('⚠️  Seed check:', err.message);
   }
 }
-
-app.locals.prisma = prisma;
-
-app.use(helmet());
-app.use(cors({
-  origin: process.env.NODE_ENV === 'production' 
-    ? process.env.FRONTEND_URL 
-    : ['http://localhost:3000', 'http://localhost:5173'],
-  credentials: true
-}));
-app.use(express.json());
-
-const limiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 100,
-  message: { error: 'Trop de requêtes, veuillez réessayer plus tard.' }
-});
-app.use('/api', limiter);
-
-app.use('/api/auth', authRoutes);
-app.use('/api/events', eventRoutes);
-app.use('/api/orders', orderRoutes);
-app.use('/api/tickets', ticketRoutes);
-
-app.get('/api/health', (req, res) => {
-  res.json({ status: 'ok', timestamp: new Date().toISOString() });
-});
-
-app.use(errorHandler);
 
 const server = app.listen(PORT, '0.0.0.0', async () => {
   await seedDatabase();
