@@ -1,10 +1,11 @@
 import Stripe from 'stripe';
+import logger from '../../shared/logger.js';
 
 const stripe = process.env.STRIPE_SECRET_KEY 
   ? new Stripe(process.env.STRIPE_SECRET_KEY)
   : null;
 
-export const createPaymentIntent = async (order, idempotencyKey) => {
+export const createPaymentIntent = async (order) => {
   if (!stripe) {
     return {
       id: `mock_${Date.now()}`,
@@ -13,24 +14,13 @@ export const createPaymentIntent = async (order, idempotencyKey) => {
     };
   }
 
-  const existingIntent = await stripe.paymentIntents.list({
-    limit: 1,
-    metadata: { orderId: order.id }
-  });
-
-  if (existingIntent.data.length > 0) {
-    return existingIntent.data[0];
-  }
-
   const intent = await stripe.paymentIntents.create({
     amount: Math.round(order.totalPrice * 100),
     currency: 'eur',
     metadata: {
       orderId: order.id,
-      userId: order.userId,
-      eventId: order.eventId
-    },
-    idempotency_key: idempotencyKey
+      userId: order.userId
+    }
   });
 
   return intent;
@@ -68,7 +58,7 @@ export const handleStripeWebhook = async (req, res, prisma) => {
         break;
     }
   } catch (err) {
-    console.error('Webhook processing error:', err);
+    logger.error({ err: err.message }, 'Webhook processing error');
   }
 
   res.json({ received: true });
@@ -118,7 +108,7 @@ const handlePaymentSuccess = async (paymentIntent, prisma) => {
     })
   ]);
 
-  console.log(`Payment succeeded for order ${orderId}, ${tickets.length} tickets created`);
+  logger.info({ orderId, ticketsCount: tickets.length }, 'Payment succeeded, tickets created');
 };
 
 const handlePaymentFailed = async (paymentIntent, prisma) => {
@@ -129,7 +119,7 @@ const handlePaymentFailed = async (paymentIntent, prisma) => {
     data: { status: 'CANCELLED' }
   });
 
-  console.log(`Payment failed for order ${orderId}`);
+  logger.warn({ orderId }, 'Payment failed');
 };
 
 const handleRefund = async (charge, prisma) => {
@@ -151,7 +141,7 @@ const handleRefund = async (charge, prisma) => {
       })
     ]);
 
-    console.log(`Refund processed for order ${order.id}`);
+    logger.info({ orderId: order.id }, 'Refund processed');
   }
 };
 

@@ -37,12 +37,23 @@ model Event {
   availableSeats Int
   imageUrl      String?
   videoUrl      String?
+  category      EventCategory @default(CONCERT)
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
   tickets       Ticket[]
   orders        Order[]
   waitlist      WaitlistEntry[]
+}
+
+enum EventCategory {
+  CONCERT
+  FESTIVAL
+  HUMOUR
+  SPORT
+  THEATRE
+  CONFERENCE
+  OTHER
 }
 
 model Order {

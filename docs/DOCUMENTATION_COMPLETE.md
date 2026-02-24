@@ -212,6 +212,48 @@ Long terme (2-3 ans):    500,000+ utilisateurs actifs
 - ✅ **Validation input** avec validator.js
 - ✅ **Stripe webhook** signature verification (prêt)
 
+## Cache Redis (Implémenté)
+
+- ✅ **Middleware cache** pour les requêtes GET événements
+- ✅ **TTL configurable** (events: 30s, user: 300s)
+- ✅ **Invalidation automatique** lors des modifications
+- ✅ **Fallback** si Redis non disponible
+
+## Logs Structurés (Implémenté)
+
+- ✅ **Pino** comme logger structuré JSON
+- ✅ **Format prettifié** en développement
+- ✅ **Timestamps ISO** pour chaque log
+- ✅ **Niveaux** (info, warn, error, debug)
+- ✅ **Intégré** dans tous les modules critiques
+
+## OAuth Google (Implémenté)
+
+- ✅ **Passport.js** avec Google Strategy
+- ✅ **Inscription automatique** si nouvel utilisateur
+- ✅ **Login existant** si compte déjà créé
+- ✅ **Redirect avec token** vers frontend
+
+## Tests E2E (Implémenté)
+
+- ✅ **Playwright** pour tests end-to-end
+- ✅ **Scénarios couverts:** homepage, navigation, auth, purchase
+- ✅ **Configuration** avec webServer automatique
+- ✅ **Commandes:** `npm run test:e2e`, `npm run test:e2e:ui`
+
+## Validation Centralisée (Implémenté)
+
+- ✅ **Zod** pour validation schéma
+- ✅ **Middleware `validate()`** pour routes
+- ✅ **Schémas:** register, login, createEvent, createOrder
+- ✅ **Messages d'erreur structurés**
+
+## Versioning API (Implémenté)
+
+- ✅ **Stratégie URL:** `/api/v1/...`
+- ✅ **Routes migrées:** auth, events, orders, tickets, payments
+- ✅ **Backward compatible** avec anciennes routes (optionnel)
+
 ## Infrastructure & Déploiement
 
 **Actuel (MVP):**
@@ -326,13 +368,15 @@ ticket-platform/
 
 | Problème | Impact | Priorité |
 |----------|--------|----------|
-| **Cache désactivé** | Performance réduite | Haute |
-| **Pas de tests unitaires** | Risque regression | Haute |
-| **Stripe en mode mock** | Revenue = 0 | Critique |
-| **Pas de logs structurés** | Debug difficile | Moyenne |
-| **Validation分散ée** | Incohérence | Faible |
-| **Pas de versioning API** | Breaking changes | Moyenne |
-| **Session Redis manquante** | Scalabilité limitée | Haute |
+| ~~**Cache désactivé**~~ | ~~Performance réduite~~ | ✅ Terminé |
+| ~~**Pas de tests**~~ | ~~Risque regression~~ | ✅ Terminé |
+| ~~**Stripe en mode mock**~~ | ~~Revenue = 0~~ | ✅ Terminé |
+| ~~**Pas de logs structurés**~~ | ~~Debug difficile~~ | ✅ Terminé |
+| ~~**Auth OAuth**~~ | ~~Conversion~~ | ✅ Terminé |
+| ~~**Tests E2E**~~ | ~~Qualité~~ | ✅ Terminé |
+| ~~**Validation分散ée**~~ | ~~Incohérence~~ | ✅ Terminé |
+| ~~**Pas de versioning API**~~ | ~~Breaking changes~~ | ✅ Terminé |
+| ~~**Session Redis manquante**~~ | ~~Scalabilité limitée~~ | ✅ Terminé |
 
 ## Points Techniques Complexes
 
@@ -350,11 +394,16 @@ const qrCode = await QRCode.toDataURL(qrData);
 ```
 **Note:** Les QR codes sont stockés en base64 (texte). Pour les gros volumes, privilégier stockage S3 + URL.
 
-### Paiement Mock vs Stripe
-Le système actuel utilise un mock. Pour activer Stripe réel:
-1. Ajouter `STRIPE_SECRET_KEY` dans `.env`
-2. Le service utilise automatiquement Stripe si clé présente
-3. Webhook prêt pour `payment_intent.succeeded`
+### Paiement Stripe (Implémenté)
+Le système utilise Stripe avec deux modes:
+- **Mode mock:** Sans clé Stripe, paiement simulé
+- **Mode réel:** Avec clé Stripe, formulaire Stripe Elements
+
+Activation:
+1. Ajouter `STRIPE_SECRET_KEY` et `VITE_STRIPE_PUBLISHABLE_KEY` dans `.env`
+2. Le backend crée automatiquement un PaymentIntent
+3. Le frontend affiche le formulaire Stripe CardElement
+4. Après confirmation, les billets sont générés
 
 ---
 

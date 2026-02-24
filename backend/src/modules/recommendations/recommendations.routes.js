@@ -1,17 +1,18 @@
 import { Router } from 'express';
-import { authenticate } from '../../shared/middleware/auth.js';
 
 const router = Router();
 
-router.get('/', authenticate, async (req, res, next) => {
+router.get('/', async (req, res, next) => {
   try {
     const prisma = req.app.locals.prisma;
-    const userId = req.user.id;
+    const userId = req.user?.id;
 
-    const userOrders = await prisma.order.findMany({
-      where: { userId, status: 'PAID' },
-      include: { event: true }
-    });
+    const userOrders = userId 
+      ? await prisma.order.findMany({
+          where: { userId, status: 'PAID' },
+          include: { event: true }
+        })
+      : [];
 
     if (userOrders.length === 0) {
       const popularEvents = await prisma.event.findMany({

@@ -2,11 +2,13 @@ import { Router } from 'express';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import validator from 'validator';
+import passport from 'passport';
 import { authenticate } from '../../shared/middleware/auth.js';
+import { validate, registerSchema, loginSchema } from '../../shared/middleware/validation.js';
 
 const router = Router();
 
-router.post('/register', async (req, res, next) => {
+router.post('/register', validate(registerSchema), async (req, res, next) => {
   try {
     const { email, password, name } = req.body;
     const prisma = req.app.locals.prisma;
@@ -47,7 +49,7 @@ router.post('/register', async (req, res, next) => {
   }
 });
 
-router.post('/login', async (req, res, next) => {
+router.post('/login', validate(loginSchema), async (req, res, next) => {
   try {
     const { email, password } = req.body;
     const prisma = req.app.locals.prisma;
@@ -93,6 +95,18 @@ router.get('/profile', authenticate, async (req, res, next) => {
   } catch (err) {
     next(err);
   }
+});
+
+router.get('/google', (req, res, next) => {
+  if (!process.env.GOOGLE_CLIENT_ID || !process.env.GOOGLE_CLIENT_SECRET) {
+    return res.status(501).json({ error: 'Google OAuth not configured' });
+  }
+  passport.authenticate('google', { scope: ['profile', 'email'] })(req, res, next);
+});
+
+router.get('/google/callback', passport.authenticate('google', { failureRedirect: '/login?error=oauth' }), (req, res) => {
+  const token = req.user.token;
+  res.redirect(`${process.env.FRONTEND_URL || 'http://localhost:8081'}?token=${token}`);
 });
 
 export default router;

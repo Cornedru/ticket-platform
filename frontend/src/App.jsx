@@ -1,7 +1,64 @@
 import { BrowserRouter, Routes, Route, Link, Navigate, useNavigate, useParams } from 'react-router-dom'
 import { useState, useEffect, createContext, useContext } from 'react'
+import { loadStripe } from '@stripe/stripe-js'
+import { Elements, CardElement, useStripe, useElements } from '@stripe/react-stripe-js'
 
 const API_URL = ''
+
+const stripePromise = loadStripe(import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY || 'pk_test_placeholder')
+
+const stripeAppearance = {
+  theme: 'night',
+  variables: {
+    colorPrimary: '#bf00ff',
+    colorBackground: '#050508',
+    colorText: '#ffffff',
+    colorDanger: '#ff4444',
+    fontFamily: 'system-ui, -apple-system, sans-serif',
+    borderRadius: '8px',
+  },
+  rules: {
+    '.Input': {
+      backgroundColor: 'rgba(255,255,255,0.05)',
+      border: '1px solid rgba(255,255,255,0.1)',
+    },
+    '.Input:focus': {
+      borderColor: '#bf00ff',
+      boxShadow: '0 0 20px rgba(191,0,255,0.2)',
+    }
+  }
+}
+
+const getYouTubeVideoId = (url) => {
+  if (!url) return null
+  const patterns = [
+    /(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/|youtube\.com\/v\/|youtube\.com\/shorts\/)([a-zA-Z0-9_-]{11})/,
+    /^([a-zA-Z0-9_-]{11})$/
+  ]
+  for (const pattern of patterns) {
+    const match = url.match(pattern)
+    if (match) return match[1]
+  }
+  return null
+}
+
+const getYouTubeEmbedUrl = (url) => {
+  const videoId = getYouTubeVideoId(url)
+  if (!videoId) return null
+  return `https://www.youtube.com/embed/${videoId}?autoplay=1&mute=1&loop=1&playlist=${videoId}&rel=0`
+}
+
+const getYouTubeThumbnailUrl = (url, fallback = true) => {
+  const videoId = getYouTubeVideoId(url)
+  if (!videoId) return null
+  return fallback 
+    ? `https://i.ytimg.com/vi/${videoId}/maxresdefault.jpg`
+    : `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`
+}
+
+const isYouTubeUrl = (url) => {
+  return !!getYouTubeVideoId(url)
+}
 
 const AuthContext = createContext(null)
 
@@ -15,7 +72,9 @@ const api = {
     }
     try {
       const response = await fetch(`${API_URL}${endpoint}`, { ...options, headers })
-      const data = await response.json()
+      const text = await response.text()
+      if (!text) throw new Error('Empty response')
+      const data = JSON.parse(text)
       if (!response.ok) throw new Error(data.error || 'Request failed')
       return data
     } catch (err) {
@@ -36,7 +95,7 @@ function AuthProvider({ children }) {
   useEffect(() => {
     const token = localStorage.getItem('token')
     if (token) {
-      api.get('/api/auth/profile')
+      api.get('/api/v1/auth/profile')
         .then(setUser)
         .catch(() => localStorage.removeItem('token'))
         .finally(() => setLoading(false))
@@ -46,13 +105,13 @@ function AuthProvider({ children }) {
   }, [])
 
   const login = async (email, password) => {
-    const data = await api.post('/api/auth/login', { email, password })
+    const data = await api.post('/api/v1/auth/login', { email, password })
     localStorage.setItem('token', data.token)
     setUser(data.user)
   }
 
   const register = async (name, email, password) => {
-    const data = await api.post('/api/auth/register', { name, email, password })
+    const data = await api.post('/api/v1/auth/register', { name, email, password })
     localStorage.setItem('token', data.token)
     setUser(data.user)
   }
@@ -76,6 +135,7 @@ function useAuth() {
 function Navbar() {
   const { user, logout } = useAuth()
   const navigate = useNavigate()
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
 
   return (
     <nav className="navbar">
@@ -84,6 +144,12 @@ function Navbar() {
           <span className="logo-icon">✦</span>
           <span className="logo-text">TRIP</span>
         </Link>
+        
+        <button className={`mobile-menu-btn ${mobileMenuOpen ? 'active' : ''}`} onClick={() => setMobileMenuOpen(!mobileMenuOpen)}>
+          <span></span>
+          <span></span>
+          <span></span>
+        </button>
         
         <div className="nav-search">
           <input 
@@ -98,7 +164,7 @@ function Navbar() {
           />
         </div>
         
-        <div className="nav-links">
+        <div className={`nav-links ${mobileMenuOpen ? 'active' : ''}`}>
           <Link to="/events" className="nav-link">Événements</Link>
           <Link to="/recommendations" className="nav-link">Pour vous</Link>
           {user ? (
@@ -192,9 +258,13 @@ function FeaturedEvents({ events }) {
             >
               <div className="featured-card-bg">
                 {event.videoUrl && (
-                  <video autoPlay loop muted playsInline>
-                    <source src={event.videoUrl} type="video/mp4" />
-                  </video>
+                  isYouTubeUrl(event.videoUrl) ? (
+                    <iframe src={getYouTubeEmbedUrl(event.videoUrl)} frameBorder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen className="featured-card-video" />
+                  ) : (
+                    <video autoPlay loop muted playsInline>
+                      <source src={event.videoUrl} type="video/mp4" />
+                    </video>
+                  )
                 )}
                 <div className="featured-card-overlay" />
               </div>
@@ -219,6 +289,16 @@ function FeaturedEvents({ events }) {
 
 function EventGrid({ events, loading, title, emptyMessage }) {
   const navigate = useNavigate()
+
+  const categoryLabels = {
+    concert: 'Concert',
+    festival: 'Festival',
+    humour: 'Humour',
+    sport: 'Sport',
+    theatre: 'Théâtre',
+    conference: 'Conférence',
+    other: 'Autre'
+  }
 
   if (loading) {
     return (
@@ -258,16 +338,20 @@ function EventGrid({ events, loading, title, emptyMessage }) {
           <div key={event.id} className="event-card" onClick={() => navigate(`/event/${event.id}`)}>
             <div className="event-card-media">
               {event.videoUrl ? (
-                <video autoPlay loop muted playsInline className="event-card-video">
-                  <source src={event.videoUrl} type="video/mp4" />
-                </video>
+                isYouTubeUrl(event.videoUrl) ? (
+                  <iframe src={getYouTubeEmbedUrl(event.videoUrl)} frameBorder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen className="event-card-video" />
+                ) : (
+                  <video autoPlay loop muted playsInline className="event-card-video">
+                    <source src={event.videoUrl} type="video/mp4" />
+                  </video>
+                )
               ) : (
                 <div className="event-card-image-placeholder">
                   <span>✦</span>
                 </div>
               )}
               <div className="event-card-overlay" />
-              <span className="event-card-category">Concert</span>
+              <span className="event-card-category">{categoryLabels[event.category?.toLowerCase()] || 'Concert'}</span>
               {event.availableSeats < 50 && event.availableSeats > 0 && (
                 <span className="event-card-alert">Plus que {event.availableSeats} places!</span>
               )}
@@ -299,13 +383,20 @@ function Home() {
   const [events, setEvents] = useState([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
+  const [category, setCategory] = useState('')
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search)
     const searchParam = params.get('search') || ''
+    const categoryParam = params.get('category') || ''
     setSearch(searchParam)
+    setCategory(categoryParam)
     
-    api.get(`/api/events${searchParam ? `?search=${searchParam}` : ''}`)
+    const queryParams = new URLSearchParams()
+    if (searchParam) queryParams.set('search', searchParam)
+    if (categoryParam) queryParams.set('category', categoryParam)
+    
+    api.get(`/api/v1/events${queryParams.toString() ? '?' + queryParams.toString() : ''}`)
       .then(data => setEvents(data.events || []))
       .catch(console.error)
       .finally(() => setLoading(false))
@@ -318,7 +409,7 @@ function Home() {
       <EventGrid 
         events={events} 
         loading={loading} 
-        title={search ? `Résultats pour "${search}"` : 'Tous les événements'} 
+        title={search || category ? `Résultats${search ? ` pour "${search}"` : ''}${category ? ` - ${category}` : ''}` : 'Tous les événements'} 
       />
     </div>
   )
@@ -327,14 +418,16 @@ function Home() {
 function Events() {
   const [events, setEvents] = useState([])
   const [loading, setLoading] = useState(true)
-  const [filter, setFilter] = useState({ search: '', date: '', price: '' })
+  const [filter, setFilter] = useState({ search: '', date: '', price: '', category: '' })
 
   useEffect(() => {
     const params = new URLSearchParams()
     if (filter.search) params.set('search', filter.search)
     if (filter.date) params.set('date', filter.date)
+    if (filter.price) params.set('price', filter.price)
+    if (filter.category) params.set('category', filter.category)
     
-    api.get(`/api/events${params.toString() ? '?' + params.toString() : ''}`)
+    api.get(`/api/v1/events${params.toString() ? '?' + params.toString() : ''}`)
       .then(data => setEvents(data.events || []))
       .catch(console.error)
       .finally(() => setLoading(false))
@@ -353,6 +446,19 @@ function Events() {
             value={filter.search}
             onChange={(e) => setFilter({...filter, search: e.target.value})}
           />
+          <select 
+            className="filter-select"
+            value={filter.category}
+            onChange={(e) => setFilter({...filter, category: e.target.value})}
+          >
+            <option value="">Toutes catégories</option>
+            <option value="concert">Concerts</option>
+            <option value="festival">Festivals</option>
+            <option value="humour">Humour</option>
+            <option value="sport">Sport</option>
+            <option value="theatre">Théâtre</option>
+            <option value="conference">Conférences</option>
+          </select>
           <select 
             className="filter-select"
             value={filter.date}
@@ -389,16 +495,27 @@ function EventDetail() {
   const [processing, setProcessing] = useState(false)
   const [inWaitlist, setInWaitlist] = useState(false)
   const [waitlistLoading, setWaitlistLoading] = useState(false)
+  const [paymentData, setPaymentData] = useState(null)
   const { user } = useAuth()
   const navigate = useNavigate()
   const { id } = useParams()
 
   useEffect(() => {
-    api.get(`/api/events/${id}`)
+    api.get(`/api/v1/events/${id}`)
       .then(setEvent)
       .catch(err => setError(err.message))
       .finally(() => setLoading(false))
   }, [id])
+
+  const categoryLabels = {
+    concert: 'Concert',
+    festival: 'Festival',
+    humour: 'Humour',
+    sport: 'Sport',
+    theatre: 'Théâtre',
+    conference: 'Conférence',
+    other: 'Autre'
+  }
 
   const handleOrder = async () => {
     if (!user) {
@@ -407,13 +524,30 @@ function EventDetail() {
     }
     setProcessing(true)
     try {
-      const orderData = await api.post('/api/orders', { eventId: id, quantity })
-      const paymentData = await api.post(`/api/orders/${orderData.id}/pay`, { paymentMethod: 'mock' })
-      setOrder(paymentData)
+      const orderData = await api.post('/api/v1/orders', { eventId: id, quantity })
+      const paymentResponse = await api.post(`/api/v1/orders/${orderData.id}/pay`, { paymentMethod: 'card' })
+      
+      if (paymentResponse.clientSecret) {
+        setPaymentData(paymentResponse)
+      } else if (paymentResponse.tickets) {
+        setOrder(paymentResponse)
+      } else {
+        const confirmData = await api.post(`/api/v1/orders/${orderData.id}/confirm`, { paymentIntentId: paymentResponse.payment?.id })
+        setOrder(confirmData)
+      }
     } catch (err) {
       setError(err.message)
     } finally {
       setProcessing(false)
+    }
+  }
+
+  const handlePaymentSuccess = async (paymentIntentId) => {
+    try {
+      const confirmData = await api.post(`/api/v1/orders/${paymentData.orderId}/confirm`, { paymentIntentId })
+      setOrder(confirmData)
+    } catch (err) {
+      setError(err.message)
     }
   }
 
@@ -424,7 +558,7 @@ function EventDetail() {
     }
     setWaitlistLoading(true)
     try {
-      await api.post('/api/waitlist', { eventId: id })
+      await api.post(`/api/v1/waitlist/${id}`)
       setInWaitlist(true)
     } catch (err) {
       setError(err.message)
@@ -437,7 +571,7 @@ function EventDetail() {
   if (error) return <div className="page"><div className="container"><div className="alert alert-error">{error}</div></div></div>
   if (!event) return <div className="page"><div className="container"><div className="alert alert-error">Événement non trouvé</div></div></div>
 
-  const videoBg = event.videoUrl || 'https://assets.mixkit.co/videos/preview/mixkit-abstract-video-of-a-futuristic-interface-32664-large.mp4'
+  const videoBg = event.videoUrl ? (isYouTubeUrl(event.videoUrl) ? getYouTubeThumbnailUrl(event.videoUrl) : event.videoUrl) : 'https://assets.mixkit.co/videos/preview/mixkit-abstract-video-of-a-futuristic-interface-32664-large.mp4'
 
   if (order) {
     return (
@@ -450,7 +584,7 @@ function EventDetail() {
               <h2>Commande confirmée!</h2>
               <p>Tes billets ont été générés</p>
               <div className="tickets-grid">
-                {order.tickets.map((ticket, i) => (
+                {(order.tickets || order.order?.tickets || []).map((ticket, i) => (
                   <div key={ticket.id} className="ticket-preview">
                     <img src={ticket.qrCode} alt="QR Code" />
                     <span>Billet #{i + 1}</span>
@@ -473,7 +607,7 @@ function EventDetail() {
         <div className="event-detail-overlay" />
         <div className="container event-detail-header">
           <div className="event-detail-info">
-            <span className="event-detail-category">Concert</span>
+            <span className="event-detail-category">{categoryLabels[event.category?.toLowerCase()] || 'Concert'}</span>
             <h1 className="event-detail-title">{event.title}</h1>
             <p className="event-detail-description">{event.description}</p>
             <div className="event-detail-meta">
@@ -493,51 +627,121 @@ function EventDetail() {
           </div>
           
           <div className="event-detail-card">
-            <div className="price-display">
-              <span className="price-label">À partir de</span>
-              <span className="price-value">{event.price.toFixed(2)}€</span>
-            </div>
-            
-            {soldOut ? (
-              <div className="soldout-section">
-                <span className="soldout-badge">Complet</span>
-                <button 
-                  className="btn btn-outline" 
-                  onClick={handleWaitlist}
-                  disabled={waitlistLoading || inWaitlist}
-                >
-                  {inWaitlist ? 'Inscrit ✓' : waitlistLoading ? 'Inscription...' : 'Rejoindre la liste d\'attente'}
-                </button>
-              </div>
+            {paymentData ? (
+              <Elements stripe={stripePromise} options={{ 
+                clientSecret: paymentData.clientSecret,
+                appearance: stripeAppearance 
+              }}>
+                <StripePaymentForm 
+                  clientSecret={paymentData.clientSecret} 
+                  amount={paymentData.amount}
+                  onSuccess={handlePaymentSuccess}
+                  onCancel={() => setPaymentData(null)}
+                />
+              </Elements>
             ) : (
               <>
-                <div className="quantity-selector">
-                  <label>Nombre de billets</label>
-                  <div className="quantity-controls">
-                    <button onClick={() => setQuantity(Math.max(1, quantity - 1))}>-</button>
-                    <span>{quantity}</span>
-                    <button onClick={() => setQuantity(Math.min(event.availableSeats, quantity + 1))}>+</button>
+                <div className="price-display">
+                  <span className="price-label">À partir de</span>
+                  <span className="price-value">{event.price.toFixed(2)}€</span>
+                </div>
+                
+                {soldOut ? (
+                  <div className="soldout-section">
+                    <span className="soldout-badge">Complet</span>
+                    <button 
+                      className="btn btn-outline" 
+                      onClick={handleWaitlist}
+                      disabled={waitlistLoading || inWaitlist}
+                    >
+                      {inWaitlist ? 'Inscrit ✓' : waitlistLoading ? 'Inscription...' : 'Rejoindre la liste d\'attente'}
+                    </button>
                   </div>
-                </div>
-                <div className="total-display">
-                  <span>Total</span>
-                  <span>{(event.price * quantity).toFixed(2)}€</span>
-                </div>
-                <button 
-                  className="btn btn-primary btn-lg" 
-                  onClick={handleOrder}
-                  disabled={processing}
-                >
-                  {processing ? 'Traitement...' : 'Réserver'}
-                </button>
+                ) : (
+                  <>
+                    <div className="quantity-selector">
+                      <label>Nombre de billets</label>
+                      <div className="quantity-controls">
+                        <button onClick={() => setQuantity(Math.max(1, quantity - 1))}>-</button>
+                        <span>{quantity}</span>
+                        <button onClick={() => setQuantity(Math.min(event.availableSeats, quantity + 1))}>+</button>
+                      </div>
+                    </div>
+                    <div className="total-display">
+                      <span>Total</span>
+                      <span>{(event.price * quantity).toFixed(2)}€</span>
+                    </div>
+                    <button 
+                      className="btn btn-primary btn-lg" 
+                      onClick={handleOrder}
+                      disabled={processing}
+                    >
+                      {processing ? 'Traitement...' : 'Réserver'}
+                    </button>
+                  </>
+                )}
+                
+                <p className="secure-notice">🔒 Paiement sécurisé</p>
               </>
             )}
-            
-            <p className="secure-notice">🔒 Paiement sécurisé</p>
           </div>
         </div>
       </div>
     </div>
+  )
+}
+
+function StripePaymentForm({ clientSecret, amount, onSuccess, onCancel }) {
+  const stripe = useStripe()
+  const elements = useElements()
+  const [error, setError] = useState(null)
+  const [processing, setProcessing] = useState(false)
+
+  const handleSubmit = async (e) => {
+    e.preventDefault()
+    if (!stripe || !elements) return
+
+    setProcessing(true)
+    setError(null)
+
+    const cardElement = elements.getElement(CardElement)
+
+    const { error: stripeError, paymentIntent } = await stripe.confirmCardPayment(clientSecret, {
+      payment_method: { card: cardElement }
+    })
+
+    if (stripeError) {
+      setError(stripeError.message)
+      setProcessing(false)
+    } else if (paymentIntent.status === 'succeeded') {
+      onSuccess(paymentIntent.id)
+    }
+  }
+
+  return (
+    <form onSubmit={handleSubmit} className="payment-form-container">
+      <h3>Paiement sécurisé</h3>
+      <div className="payment-amount">{amount.toFixed(2)}€</div>
+      <div className="card-element-container">
+        <CardElement options={{
+          style: {
+            base: {
+              fontSize: '16px',
+              color: '#ffffff',
+              '::placeholder': { color: 'rgba(255,255,255,0.5)' },
+            },
+            invalid: { color: '#ff4444' }
+          }
+        }} />
+      </div>
+      {error && <div className="alert alert-error">{error}</div>}
+      <div className="payment-buttons">
+        <button type="button" className="btn btn-outline" onClick={onCancel} disabled={processing}>Annuler</button>
+        <button type="submit" className="btn btn-primary" disabled={!stripe || processing}>
+          {processing ? 'Traitement...' : 'Payer'}
+        </button>
+      </div>
+    </form>
   )
 }
 
@@ -546,7 +750,7 @@ function Recommendations() {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    api.get('/api/recommendations')
+    api.get('/api/v1/recommendations')
       .then(data => setEvents(data.events || []))
       .catch(console.error)
       .finally(() => setLoading(false))
@@ -570,7 +774,7 @@ function Waitlist() {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    api.get('/api/waitlist')
+    api.get('/api/v1/waitlist')
       .then(data => setEntries(data.entries || []))
       .catch(console.error)
       .finally(() => setLoading(false))
@@ -578,7 +782,7 @@ function Waitlist() {
 
   const handleRemove = async (id) => {
     try {
-      await api.delete(`/api/waitlist/${id}`)
+      await api.delete(`/api/v1/waitlist/${id}`)
       setEntries(entries.filter(e => e.id !== id))
     } catch (err) {
       alert(err.message)
@@ -621,7 +825,7 @@ function Analytics() {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    api.get('/api/admin/analytics')
+    api.get('/api/v1/admin/analytics')
       .then(setData)
       .catch(console.error)
       .finally(() => setLoading(false))
@@ -767,7 +971,7 @@ function Orders() {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    api.get('/api/orders')
+    api.get('/api/v1/orders')
       .then(setOrders)
       .catch(console.error)
       .finally(() => setLoading(false))
@@ -812,13 +1016,51 @@ function Tickets() {
   const [tickets, setTickets] = useState([])
   const [loading, setLoading] = useState(true)
   const [selectedTicket, setSelectedTicket] = useState(null)
+  const [showTransferModal, setShowTransferModal] = useState(false)
+  const [transferEmail, setTransferEmail] = useState('')
+  const [transferName, setTransferName] = useState('')
+  const [transferring, setTransferring] = useState(false)
+  const [transferError, setTransferError] = useState(null)
+  const [transferSuccess, setTransferSuccess] = useState(false)
 
   useEffect(() => {
-    api.get('/api/tickets')
+    api.get('/api/v1/tickets')
       .then(setTickets)
       .catch(console.error)
       .finally(() => setLoading(false))
   }, [])
+
+  const handleTransfer = async (e) => {
+    e.preventDefault()
+    setTransferring(true)
+    setTransferError(null)
+    try {
+      await api.post(`/api/v1/tickets/${selectedTicket.id}/transfer`, {
+        recipientEmail: transferEmail,
+        recipientName: transferName
+      })
+      setTransferSuccess(true)
+      setTimeout(() => {
+        setShowTransferModal(false)
+        setSelectedTicket(null)
+        setTransferSuccess(false)
+        setTransferEmail('')
+        setTransferName('')
+        api.get('/api/v1/tickets').then(setTickets)
+      }, 2000)
+    } catch (err) {
+      setTransferError(err.message)
+    } finally {
+      setTransferring(false)
+    }
+  }
+
+  const isTransferable = (ticket) => {
+    const eventDate = new Date(ticket.event.date)
+    const now = new Date()
+    const hoursUntilEvent = (eventDate - now) / (1000 * 60 * 60)
+    return !ticket.scanned && hoursUntilEvent > 48
+  }
 
   if (loading) return <div className="loading"><div className="spinner" /></div>
 
@@ -858,13 +1100,63 @@ function Tickets() {
       </div>
       
       {selectedTicket && (
-        <div className="modal-overlay" onClick={() => setSelectedTicket(null)}>
+        <div className="modal-overlay" onClick={() => { setSelectedTicket(null); setShowTransferModal(false) }}>
           <div className="modal-content ticket-modal" onClick={e => e.stopPropagation()}>
-            <button className="modal-close" onClick={() => setSelectedTicket(null)}>×</button>
+            <button className="modal-close" onClick={() => { setSelectedTicket(null); setShowTransferModal(false) }}>×</button>
             <h3>{selectedTicket.event.title}</h3>
             <p>{new Date(selectedTicket.event.date).toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' })}</p>
             <p>{selectedTicket.event.location}</p>
             <img src={selectedTicket.qrCode} alt="QR Code" className="qr-code-lg" />
+            {isTransferable(selectedTicket) && (
+              <button 
+                className="btn btn-outline mt-3" 
+                onClick={(e) => { e.stopPropagation(); setShowTransferModal(true) }}
+              >
+                Transférer ce billet
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+
+      {showTransferModal && selectedTicket && (
+        <div className="modal-overlay" onClick={() => setShowTransferModal(false)}>
+          <div className="modal-content" onClick={e => e.stopPropagation()}>
+            <button className="modal-close" onClick={() => setShowTransferModal(false)}>×</button>
+            <h3>Transférer le billet</h3>
+            <p className="text-muted mb-3">Le bénéficiaire doit avoir un compte TicketHub</p>
+            
+            {transferSuccess ? (
+              <div className="alert alert-success">
+                Billet transféré avec succès!
+              </div>
+            ) : (
+              <form onSubmit={handleTransfer}>
+                {transferError && <div className="alert alert-error">{transferError}</div>}
+                <div className="form-group">
+                  <label className="form-label">Email du bénéficiaire</label>
+                  <input 
+                    type="email" 
+                    value={transferEmail} 
+                    onChange={e => setTransferEmail(e.target.value)}
+                    className="form-input" 
+                    required 
+                  />
+                </div>
+                <div className="form-group">
+                  <label className="form-label">Nom du bénéficiaire (optionnel)</label>
+                  <input 
+                    type="text" 
+                    value={transferName} 
+                    onChange={e => setTransferName(e.target.value)}
+                    className="form-input" 
+                  />
+                </div>
+                <button type="submit" className="btn btn-primary" disabled={transferring}>
+                  {transferring ? 'Transfert en cours...' : 'Confirmer le transfert'}
+                </button>
+              </form>
+            )}
           </div>
         </div>
       )}
@@ -877,28 +1169,48 @@ function Admin() {
   const [orders, setOrders] = useState([])
   const [activeTab, setActiveTab] = useState('events')
   const [showEventForm, setShowEventForm] = useState(false)
+  const [editingEvent, setEditingEvent] = useState(null)
   const [formData, setFormData] = useState({ title: '', description: '', date: '', location: '', price: '', totalSeats: '', videoUrl: '' })
   const { user } = useAuth()
 
   useEffect(() => {
     if (activeTab === 'events') {
-      api.get('/api/events').then(data => setEvents(data.events)).catch(console.error)
+      api.get('/api/v1/events').then(data => setEvents(data.events)).catch(console.error)
     } else {
-      api.get('/api/orders/all').then(setOrders).catch(console.error)
+      api.get('/api/v1/orders/all').then(setOrders).catch(console.error)
     }
   }, [activeTab])
 
   const handleCreateEvent = async (e) => {
     e.preventDefault()
     try {
-      await api.post('/api/events', formData)
+      if (editingEvent) {
+        await api.put(`/api/v1/events/${editingEvent.id}`, formData)
+        setEditingEvent(null)
+      } else {
+        await api.post('/api/v1/events', formData)
+      }
       setShowEventForm(false)
       setFormData({ title: '', description: '', date: '', location: '', price: '', totalSeats: '', videoUrl: '' })
-      const data = await api.get('/api/events')
+      const data = await api.get('/api/v1/events')
       setEvents(data.events)
     } catch (err) {
       alert(err.message)
     }
+  }
+
+  const handleEditEvent = (event) => {
+    setEditingEvent(event)
+    setFormData({
+      title: event.title,
+      description: event.description,
+      date: event.date ? new Date(event.date).toISOString().slice(0, 16) : '',
+      location: event.location,
+      price: event.price,
+      totalSeats: event.totalSeats,
+      videoUrl: event.videoUrl || ''
+    })
+    setShowEventForm(true)
   }
 
   if (user?.role !== 'ADMIN') {
@@ -933,7 +1245,7 @@ function Admin() {
 
         {activeTab === 'events' && (
           <>
-            <button className="btn mb-4" onClick={() => setShowEventForm(!showEventForm)}>
+            <button className="btn mb-4" onClick={() => { setShowEventForm(!showEventForm); if (showEventForm) { setEditingEvent(null); setFormData({ title: '', description: '', date: '', location: '', price: '', totalSeats: '', videoUrl: '' }) } }}>
               {showEventForm ? 'Annuler' : '+ Nouvel événement'}
             </button>
             
@@ -972,7 +1284,7 @@ function Admin() {
                       <input type="number" value={formData.totalSeats} onChange={e => setFormData({...formData, totalSeats: e.target.value})} className="form-input" required />
                     </div>
                   </div>
-                  <button type="submit" className="btn btn-primary">Créer</button>
+                  <button type="submit" className="btn btn-primary">{editingEvent ? 'Mettre à jour' : 'Créer'}</button>
                 </form>
               </div>
             )}
@@ -996,7 +1308,7 @@ function Admin() {
                       <td>{event.availableSeats}/{event.totalSeats}</td>
                       <td>{event.price.toFixed(2)}€</td>
                       <td>
-                        <button className="btn btn-sm btn-outline">Modifier</button>
+                        <button className="btn btn-sm btn-outline" onClick={() => handleEditEvent(event)}>Modifier</button>
                       </td>
                     </tr>
                   ))}

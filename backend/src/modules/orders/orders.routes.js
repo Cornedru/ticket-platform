@@ -2,10 +2,12 @@ import { Router } from 'express';
 import { v4 as uuidv4 } from 'uuid';
 import QRCode from 'qrcode';
 import { authenticate, requireAdmin } from '../../shared/middleware/auth.js';
+import { createPaymentIntent, stripe } from '../payment/payment.service.js';
+import { validate, createOrderSchema } from '../../shared/middleware/validation.js';
 
 const router = Router();
 
-router.post('/', authenticate, async (req, res, next) => {
+router.post('/', authenticate, validate(createOrderSchema), async (req, res, next) => {
   try {
     const { eventId, quantity } = req.body;
     const userId = req.user.id;
@@ -46,10 +48,10 @@ router.post('/', authenticate, async (req, res, next) => {
   }
 });
 
-router.post('/:orderId/pay', authenticate, async (req, res, next) => {
+router.post('/:orderId/confirm', authenticate, async (req, res, next) => {
   try {
     const { orderId } = req.params;
-    const { paymentMethod } = req.body;
+    const { paymentIntentId } = req.body;
     const prisma = req.app.locals.prisma;
 
     const order = await prisma.order.findUnique({
@@ -69,8 +71,17 @@ router.post('/:orderId/pay', authenticate, async (req, res, next) => {
       return res.status(400).json({ error: 'Order already processed' });
     }
 
-    const mockPaymentId = `MOCK-${uuidv4().substring(0, 8).toUpperCase()}`;
+    let paymentIntent;
+    if (stripe && paymentIntentId) {
+      paymentIntent = await stripe.paymentIntents.retrieve(paymentIntentId);
+      
+      if (paymentIntent.status !== 'succeeded') {
+        return res.status(400).json({ error: 'Payment not completed', status: paymentIntent.status });
+      }
+    }
 
+    const mockPaymentId = paymentIntentId || `MOCK-${uuidv4().substring(0, 8).toUpperCase()}`;
+    
     const tickets = [];
     for (let i = 0; i < order.quantity; i++) {
       const ticketId = uuidv4();
@@ -104,8 +115,85 @@ router.post('/:orderId/pay', authenticate, async (req, res, next) => {
     res.json({
       order: { ...order, status: 'PAID', paymentId: mockPaymentId },
       tickets,
-      payment: { id: mockPaymentId, status: 'success', method: paymentMethod || 'mock', amount: order.totalPrice }
+      payment: { id: mockPaymentId, status: 'success', amount: order.totalPrice }
     });
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.post('/:orderId/pay', authenticate, async (req, res, next) => {
+  try {
+    const { orderId } = req.params;
+    const { paymentMethod } = req.body;
+    const prisma = req.app.locals.prisma;
+
+    const order = await prisma.order.findUnique({
+      where: { id: orderId },
+      include: { event: true }
+    });
+
+    if (!order) {
+      return res.status(404).json({ error: 'Order not found' });
+    }
+
+    if (order.userId !== req.user.id) {
+      return res.status(403).json({ error: 'Not authorized' });
+    }
+
+    if (order.status !== 'PENDING') {
+      return res.status(400).json({ error: 'Order already processed' });
+    }
+
+    const paymentIntent = await createPaymentIntent(order);
+
+    if (!stripe) {
+      const mockPaymentId = `MOCK-${uuidv4().substring(0, 8).toUpperCase()}`;
+      
+      const tickets = [];
+      for (let i = 0; i < order.quantity; i++) {
+        const ticketId = uuidv4();
+        const qrData = JSON.stringify({
+          ticketId,
+          orderId,
+          eventId: order.eventId,
+          userId: order.userId,
+          timestamp: Date.now()
+        });
+
+        const qrCode = await QRCode.toDataURL(qrData);
+
+        const ticket = await prisma.ticket.create({
+          data: { id: ticketId, orderId, eventId: order.eventId, userId: order.userId, qrCode }
+        });
+        tickets.push(ticket);
+      }
+
+      await prisma.$transaction([
+        prisma.order.update({
+          where: { id: orderId },
+          data: { status: 'PAID', paymentId: mockPaymentId }
+        }),
+        prisma.event.update({
+          where: { id: order.eventId },
+          data: { availableSeats: { decrement: order.quantity } }
+        })
+      ]);
+
+      res.json({
+        order: { ...order, status: 'PAID', paymentId: mockPaymentId },
+        tickets,
+        payment: { id: mockPaymentId, status: 'success', method: paymentMethod || 'mock', amount: order.totalPrice }
+      });
+    } else {
+      res.json({
+        orderId: order.id,
+        clientSecret: paymentIntent.client_secret,
+        amount: order.totalPrice,
+        currency: 'eur',
+        status: paymentIntent.status
+      });
+    }
   } catch (err) {
     next(err);
   }

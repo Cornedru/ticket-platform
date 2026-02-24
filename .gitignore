@@ -1,0 +1,19 @@
+# Secrets
+.env
+*.env
+
+# SSL
+server.key
+server.crt
+*.pem
+*.key
+*.crt
+
+# Node
+node_modules/
+
+# Logs
+*.log
+
+# Docker overrides
+docker-compose.override.yml

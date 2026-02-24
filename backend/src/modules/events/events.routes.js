@@ -1,26 +1,64 @@
 import { Router } from 'express';
 import { invalidateCache, cacheMiddleware } from '../../shared/middleware/cache.js';
 import { authenticate, requireAdmin } from '../../shared/middleware/auth.js';
+import { validate, createEventSchema } from '../../shared/middleware/validation.js';
 
 const router = Router();
 
 router.get('/', cacheMiddleware('events:', 30), async (req, res, next) => {
   try {
     const prisma = req.app.locals.prisma;
-    const { page = 1, limit = 10, upcoming } = req.query;
+    const { page = 1, limit = 10, upcoming, category, search, date, price } = req.query;
 
-    const where = upcoming === 'true' ? { date: { gte: new Date() } } : {};
+    const where = {};
+    
+    if (upcoming === 'true') {
+      where.date = { gte: new Date() };
+    }
+    
+    if (category && category !== 'all') {
+      where.category = category.toUpperCase();
+    }
+
+    if (search) {
+      where.OR = [
+        { title: { contains: search, mode: 'insensitive' } },
+        { location: { contains: search, mode: 'insensitive' } }
+      ];
+    }
+
+    if (date) {
+      const now = new Date();
+      if (date === 'today') {
+        const endOfDay = new Date(now);
+        endOfDay.setHours(23, 59, 59, 999);
+        where.date = { ...where.date, gte: now, lte: endOfDay };
+      } else if (date === 'week') {
+        const endOfWeek = new Date(now);
+        endOfWeek.setDate(now.getDate() + 7);
+        where.date = { ...where.date, gte: now, lte: endOfWeek };
+      } else if (date === 'month') {
+        const endOfMonth = new Date(now);
+        endOfMonth.setMonth(now.getMonth() + 1);
+        where.date = { ...where.date, gte: now, lte: endOfMonth };
+      }
+    }
+
+    let orderBy = { date: 'asc' };
+    if (price === 'asc' || price === 'desc') {
+      orderBy = { price: price };
+    }
 
     const [events, total] = await Promise.all([
       prisma.event.findMany({
         where,
         skip: (page - 1) * limit,
         take: Number(limit),
-        orderBy: { date: 'asc' },
+        orderBy,
         select: {
           id: true, title: true, description: true, date: true,
           location: true, price: true, totalSeats: true,
-          availableSeats: true, imageUrl: true, videoUrl: true
+          availableSeats: true, imageUrl: true, videoUrl: true, category: true
         }
       }),
       prisma.event.count({ where })
@@ -43,7 +81,7 @@ router.get('/:id', cacheMiddleware('events:', 60), async (req, res, next) => {
       select: {
         id: true, title: true, description: true, date: true,
         location: true, price: true, totalSeats: true,
-        availableSeats: true, imageUrl: true, videoUrl: true, createdAt: true
+        availableSeats: true, imageUrl: true, videoUrl: true, category: true, createdAt: true
       }
     });
 
@@ -57,9 +95,9 @@ router.get('/:id', cacheMiddleware('events:', 60), async (req, res, next) => {
   }
 });
 
-router.post('/', authenticate, requireAdmin, async (req, res, next) => {
+router.post('/', authenticate, requireAdmin, validate(createEventSchema), async (req, res, next) => {
   try {
-    const { title, description, date, location, price, totalSeats, imageUrl, videoUrl } = req.body;
+    const { title, description, date, location, price, totalSeats, imageUrl, videoUrl, category } = req.body;
     const prisma = req.app.locals.prisma;
 
     if (!title || !description || !date || !location || !price || !totalSeats) {
@@ -70,7 +108,8 @@ router.post('/', authenticate, requireAdmin, async (req, res, next) => {
       data: {
         title, description, date: new Date(date), location,
         price: Number(price), totalSeats: Number(totalSeats),
-        availableSeats: Number(totalSeats), imageUrl, videoUrl
+        availableSeats: Number(totalSeats), imageUrl, videoUrl,
+        category: category ? category.toUpperCase() : 'CONCERT'
       }
     });
 
@@ -85,7 +124,7 @@ router.post('/', authenticate, requireAdmin, async (req, res, next) => {
 router.put('/:id', authenticate, requireAdmin, async (req, res, next) => {
   try {
     const { id } = req.params;
-    const { title, description, date, location, price, totalSeats, imageUrl, videoUrl } = req.body;
+    const { title, description, date, location, price, totalSeats, imageUrl, videoUrl, category } = req.body;
     const prisma = req.app.locals.prisma;
 
     const event = await prisma.event.update({
@@ -98,7 +137,8 @@ router.put('/:id', authenticate, requireAdmin, async (req, res, next) => {
         ...(price && { price: Number(price) }),
         ...(totalSeats && { totalSeats: Number(totalSeats) }),
         ...(imageUrl && { imageUrl }),
-        ...(videoUrl && { videoUrl })
+        ...(videoUrl && { videoUrl }),
+        ...(category && { category: category.toUpperCase() })
       }
     });
 
