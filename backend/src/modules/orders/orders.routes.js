@@ -1,32 +1,9 @@
 import { Router } from 'express';
-import jwt from 'jsonwebtoken';
 import { v4 as uuidv4 } from 'uuid';
 import QRCode from 'qrcode';
+import { authenticate, requireAdmin } from '../../shared/middleware/auth.js';
 
 const router = Router();
-
-const authenticate = (req, res, next) => {
-  const authHeader = req.headers.authorization;
-  if (!authHeader || !authHeader.startsWith('Bearer ')) {
-    return res.status(401).json({ error: 'Token required' });
-  }
-
-  try {
-    const token = authHeader.split(' ')[1];
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    req.user = decoded;
-    next();
-  } catch {
-    return res.status(401).json({ error: 'Invalid token' });
-  }
-};
-
-const requireAdmin = (req, res, next) => {
-  if (req.user?.role !== 'ADMIN') {
-    return res.status(403).json({ error: 'Admin access required' });
-  }
-  next();
-};
 
 router.post('/', authenticate, async (req, res, next) => {
   try {
@@ -38,27 +15,32 @@ router.post('/', authenticate, async (req, res, next) => {
       return res.status(400).json({ error: 'Event and quantity required' });
     }
 
-    const event = await prisma.event.findUnique({ where: { id: eventId } });
-    if (!event) {
-      return res.status(404).json({ error: 'Event not found' });
-    }
+    // Transaction atomique pour éviter race condition
+    const result = await prisma.$transaction(async (tx) => {
+      const event = await tx.event.findUnique({ where: { id: eventId } });
+      if (!event) {
+        throw Object.assign(new Error('Event not found'), { status: 404 });
+      }
 
-    if (event.availableSeats < quantity) {
-      return res.status(400).json({ error: 'Not enough seats available' });
-    }
+      if (event.availableSeats < quantity) {
+        throw Object.assign(new Error('Not enough seats available'), { status: 400 });
+      }
 
-    if (new Date(event.date) < new Date()) {
-      return res.status(400).json({ error: 'Event has already occurred' });
-    }
+      if (new Date(event.date) < new Date()) {
+        throw Object.assign(new Error('Event has already occurred'), { status: 400 });
+      }
 
-    const totalPrice = event.price * quantity;
-    const idempotencyKey = `${userId}:${eventId}:${Date.now()}`;
+      const totalPrice = event.price * quantity;
+      const idempotencyKey = `${userId}:${eventId}:${Date.now()}`;
 
-    const order = await prisma.order.create({
-      data: { userId, eventId, quantity, totalPrice, status: 'PENDING' }
+      const order = await tx.order.create({
+        data: { userId, eventId, quantity, totalPrice, status: 'PENDING' }
+      });
+
+      return { order, totalPrice, idempotencyKey };
     });
 
-    res.status(201).json({ ...order, idempotencyKey });
+    res.status(201).json({ ...result.order, idempotencyKey: result.idempotencyKey });
   } catch (err) {
     next(err);
   }

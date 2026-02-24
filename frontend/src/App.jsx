@@ -1,4 +1,4 @@
-import { BrowserRouter, Routes, Route, Link, Navigate, useNavigate } from 'react-router-dom'
+import { BrowserRouter, Routes, Route, Link, Navigate, useNavigate, useParams } from 'react-router-dom'
 import { useState, useEffect, createContext, useContext } from 'react'
 
 const API_URL = ''
@@ -73,40 +73,49 @@ function useAuth() {
   return useContext(AuthContext)
 }
 
-function VideoBackground({ src }) {
-  if (!src) return null
-  return (
-    <div className="event-video-bg">
-      <video autoPlay loop muted playsInline>
-        <source src={src} type="video/mp4" />
-      </video>
-      <div className="event-video-overlay" />
-    </div>
-  )
-}
-
 function Navbar() {
   const { user, logout } = useAuth()
   const navigate = useNavigate()
 
   return (
     <nav className="navbar">
-      <div className="container">
-        <Link to="/" className="logo glitch-hover">✦ TRIP ✦</Link>
+      <div className="container nav-container">
+        <Link to="/" className="logo">
+          <span className="logo-icon">✦</span>
+          <span className="logo-text">TRIP</span>
+        </Link>
+        
+        <div className="nav-search">
+          <input 
+            type="text" 
+            placeholder="Rechercher un artiste, événement..." 
+            className="search-input"
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                navigate(`/?search=${e.target.value}`)
+              }
+            }}
+          />
+        </div>
+        
         <div className="nav-links">
-          <Link to="/">Événements</Link>
+          <Link to="/events" className="nav-link">Événements</Link>
+          <Link to="/recommendations" className="nav-link">Pour vous</Link>
           {user ? (
             <>
-              <Link to="/orders">Commandes</Link>
-              <Link to="/tickets">Billetterie</Link>
-              {user.role === 'ADMIN' && <Link to="/admin">Admin</Link>}
-              <span className="text-muted">{user.name}</span>
-              <button className="btn btn-outline" onClick={() => { logout(); navigate('/') }}>Déconnexion</button>
+              <Link to="/orders" className="nav-link">Mes commandes</Link>
+              <Link to="/tickets" className="nav-link">Mes billets</Link>
+              {user.role === 'ADMIN' && <Link to="/admin" className="nav-link">Admin</Link>}
+              <div className="user-menu">
+                <span className="user-avatar">{user.name.charAt(0)}</span>
+                <span className="user-name">{user.name}</span>
+              </div>
+              <button className="btn btn-outline btn-sm" onClick={() => { logout(); navigate('/') }}>Déconnexion</button>
             </>
           ) : (
             <>
-              <Link to="/login">Connexion</Link>
-              <Link to="/register" className="btn">Inscription</Link>
+              <Link to="/login" className="nav-link">Connexion</Link>
+              <Link to="/register" className="btn btn-primary btn-sm">Inscription</Link>
             </>
           )}
         </div>
@@ -115,91 +124,257 @@ function Navbar() {
   )
 }
 
-function Home() {
-  const [events, setEvents] = useState([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState(null)
+function Hero() {
+  const navigate = useNavigate()
+  const [search, setSearch] = useState('')
 
-  useEffect(() => {
-    api.get('/api/events?upcoming=true')
-      .then(data => {
-        console.log('Events data:', data)
-        setEvents(data.events || data || [])
-      })
-      .catch(err => {
-        console.error('Error loading events:', err)
-        setError(err.message)
-      })
-      .finally(() => setLoading(false))
-  }, [])
-
-  if (loading) return <div className="loading"><div className="spinner"></div></div>
-  if (error) return <div className="page"><div className="container"><div className="alert alert-error">Erreur: {error}</div></div></div>
+  const handleSearch = (e) => {
+    e.preventDefault()
+    navigate(`/?search=${search}`)
+  }
 
   return (
-    <div className="page">
+    <section className="hero-section">
+      <div className="hero-bg">
+        <div className="hero-gradient" />
+        <div className="hero-pattern" />
+      </div>
+      <div className="container hero-content">
+        <h1 className="hero-title">
+          <span className="hero-title-line">VIBREZ</span>
+          <span className="hero-title-line accent">DIFFÉREMMENT</span>
+        </h1>
+        <p className="hero-subtitle">Des expériences uniques. Des moments inoubliables. Trouvez votre prochaine adventure.</p>
+        
+        <form onSubmit={handleSearch} className="hero-search">
+          <input 
+            type="text" 
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Artiste, ville, genre..." 
+            className="hero-search-input"
+          />
+          <button type="submit" className="btn btn-primary">Rechercher</button>
+        </form>
+        
+        <div className="hero-categories">
+          <Link to="/?category=concert" className="category-pill">Concerts</Link>
+          <Link to="/?category=festival" className="category-pill">Festivals</Link>
+          <Link to="/?category=humour" className="category-pill">Humour</Link>
+          <Link to="/?category=sport" className="category-pill">Sport</Link>
+          <Link to="/?category=theatre" className="category-pill">Théâtre</Link>
+        </div>
+      </div>
+    </section>
+  )
+}
+
+function FeaturedEvents({ events }) {
+  const navigate = useNavigate()
+  if (!events || events.length === 0) return null
+
+  const featured = events.slice(0, 3)
+
+  return (
+    <section className="featured-section">
       <div className="container">
-        <div className="hero">
-          <div className="hero-content">
-            <h1>VOYAGE SENSORIEL</h1>
-            <p className="hero-subtitle">Plonge dans des expériences hallucinantes - Prix hallucinants</p>
-            <Link to="/#events" className="btn btn-primary">
-              <span>Explorer les维度</span>
-            </Link>
-          </div>
+        <div className="section-header">
+          <h2 className="section-title">À la une</h2>
+          <Link to="/events" className="section-link">Voir tout</Link>
         </div>
         
-        <h2 className="page-title" style={{ textAlign: 'center', marginBottom: '48px' }}>À Venir</h2>
-        
-        {events.length === 0 ? (
-          <p className="text-center text-muted">Aucun événement disponible - Reviens plus tard</p>
-        ) : (
-          <div className="grid grid-3">
-            {events.map(event => (
-              <EventCard key={event.id} event={event} />
-            ))}
+        <div className="featured-grid">
+          {featured.map((event, index) => (
+            <div 
+              key={event.id} 
+              className={`featured-card featured-card-${index + 1}`}
+              onClick={() => navigate(`/event/${event.id}`)}
+            >
+              <div className="featured-card-bg">
+                {event.videoUrl && (
+                  <video autoPlay loop muted playsInline>
+                    <source src={event.videoUrl} type="video/mp4" />
+                  </video>
+                )}
+                <div className="featured-card-overlay" />
+              </div>
+              <div className="featured-card-content">
+                <span className="featured-badge">À la une</span>
+                <h3 className="featured-title">{event.title}</h3>
+                <p className="featured-meta">
+                  {new Date(event.date).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long' })} • {event.location}
+                </p>
+                <div className="featured-footer">
+                  <span className="featured-price">À partir de {event.price.toFixed(2)}€</span>
+                  <span className="btn btn-sm">Voir</span>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </section>
+  )
+}
+
+function EventGrid({ events, loading, title, emptyMessage }) {
+  const navigate = useNavigate()
+
+  if (loading) {
+    return (
+      <div className="container">
+        <h2 className="section-title">{title}</h2>
+        <div className="events-grid">
+          {[1,2,3,4,5,6].map(i => (
+            <div key={i} className="event-card-skeleton">
+              <div className="skeleton skeleton-image" />
+              <div className="skeleton skeleton-title" />
+              <div className="skeleton skeleton-text" />
+              <div className="skeleton skeleton-text short" />
+            </div>
+          ))}
+        </div>
+      </div>
+    )
+  }
+
+  if (!events || events.length === 0) {
+    return (
+      <div className="container">
+        <h2 className="section-title">{title}</h2>
+        <div className="empty-state">
+          <span className="empty-icon">✦</span>
+          <p>{emptyMessage || 'Aucun événement trouvé'}</p>
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="container">
+      <h2 className="section-title">{title}</h2>
+      <div className="events-grid">
+        {events.map(event => (
+          <div key={event.id} className="event-card" onClick={() => navigate(`/event/${event.id}`)}>
+            <div className="event-card-media">
+              {event.videoUrl ? (
+                <video autoPlay loop muted playsInline className="event-card-video">
+                  <source src={event.videoUrl} type="video/mp4" />
+                </video>
+              ) : (
+                <div className="event-card-image-placeholder">
+                  <span>✦</span>
+                </div>
+              )}
+              <div className="event-card-overlay" />
+              <span className="event-card-category">Concert</span>
+              {event.availableSeats < 50 && event.availableSeats > 0 && (
+                <span className="event-card-alert">Plus que {event.availableSeats} places!</span>
+              )}
+              {event.availableSeats === 0 && (
+                <span className="event-card-soldout">Complet</span>
+              )}
+            </div>
+            <div className="event-card-content">
+              <h3 className="event-card-title">{event.title}</h3>
+              <p className="event-card-date">
+                {new Date(event.date).toLocaleDateString('fr-FR', { weekday: 'short', day: 'numeric', month: 'short' })} • {new Date(event.date).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}
+              </p>
+              <p className="event-card-location">{event.location}</p>
+              <div className="event-card-footer">
+                <span className="event-card-price">
+                  {event.price.toFixed(2)}€
+                </span>
+                <span className="btn btn-sm">Réserver</span>
+              </div>
+            </div>
           </div>
-        )}
+        ))}
       </div>
     </div>
   )
 }
 
-function EventCard({ event }) {
-  const navigate = useNavigate()
-  const videoSample = 'https://assets.mixkit.co/videos/preview/mixkit-abstract-video-of-a-futuristic-interface-32664-large.mp4'
+function Home() {
+  const [events, setEvents] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [search, setSearch] = useState('')
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    const searchParam = params.get('search') || ''
+    setSearch(searchParam)
+    
+    api.get(`/api/events${searchParam ? `?search=${searchParam}` : ''}`)
+      .then(data => setEvents(data.events || []))
+      .catch(console.error)
+      .finally(() => setLoading(false))
+  }, [])
 
   return (
-    <div className="card glitch-hover" onClick={() => navigate(`/event/${event.id}`)} style={{ cursor: 'pointer' }}>
-      <div className="card-image">
-        {event.videoUrl ? (
-          <video 
-            autoPlay 
-            loop 
-            muted 
-            playsInline 
-            className="card-video"
-            style={{ position: 'absolute', width: '100%', height: '100%', objectFit: 'cover' }}
+    <div className="home-page">
+      <Hero />
+      <FeaturedEvents events={events} />
+      <EventGrid 
+        events={events} 
+        loading={loading} 
+        title={search ? `Résultats pour "${search}"` : 'Tous les événements'} 
+      />
+    </div>
+  )
+}
+
+function Events() {
+  const [events, setEvents] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [filter, setFilter] = useState({ search: '', date: '', price: '' })
+
+  useEffect(() => {
+    const params = new URLSearchParams()
+    if (filter.search) params.set('search', filter.search)
+    if (filter.date) params.set('date', filter.date)
+    
+    api.get(`/api/events${params.toString() ? '?' + params.toString() : ''}`)
+      .then(data => setEvents(data.events || []))
+      .catch(console.error)
+      .finally(() => setLoading(false))
+  }, [filter])
+
+  return (
+    <div className="page events-page">
+      <div className="container">
+        <h1 className="page-title">Tous les événements</h1>
+        
+        <div className="filters-bar">
+          <input 
+            type="text" 
+            placeholder="Rechercher..." 
+            className="filter-input"
+            value={filter.search}
+            onChange={(e) => setFilter({...filter, search: e.target.value})}
+          />
+          <select 
+            className="filter-select"
+            value={filter.date}
+            onChange={(e) => setFilter({...filter, date: e.target.value})}
           >
-            <source src={event.videoUrl} type="video/mp4" />
-          </video>
-        ) : null}
-        <div className="card-image-overlay" />
-        <span className="icon">✦</span>
-      </div>
-      <div className="card-body">
-        <h3 className="card-title">{event.title}</h3>
-        <p className="card-text">{event.description}</p>
-        <p className="card-text text-muted">
-          {new Date(event.date).toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' })}
-        </p>
-        <div className="card-meta">
-          <span className="price">{event.price.toFixed(2)} €</span>
-          <span className="seats">{event.availableSeats} places</span>
+            <option value="">Toutes dates</option>
+            <option value="today">Aujourd'hui</option>
+            <option value="week">Cette semaine</option>
+            <option value="month">Ce mois</option>
+          </select>
+          <select 
+            className="filter-select"
+            value={filter.price}
+            onChange={(e) => setFilter({...filter, price: e.target.value})}
+          >
+            <option value="">Tous prix</option>
+            <option value="asc">Prix croissant</option>
+            <option value="desc">Prix décroissant</option>
+          </select>
         </div>
-        <button className="btn mt-2" style={{ width: '100%' }} onClick={() => navigate(`/event/${event.id}`)}>
-          <span>Réserver ton trip</span>
-        </button>
+        
+        <EventGrid events={events} loading={loading} title="" />
       </div>
     </div>
   )
@@ -212,17 +387,18 @@ function EventDetail() {
   const [error, setError] = useState(null)
   const [order, setOrder] = useState(null)
   const [processing, setProcessing] = useState(false)
+  const [inWaitlist, setInWaitlist] = useState(false)
+  const [waitlistLoading, setWaitlistLoading] = useState(false)
   const { user } = useAuth()
   const navigate = useNavigate()
-
-  const eventId = window.location.pathname.split('/').pop()
+  const { id } = useParams()
 
   useEffect(() => {
-    api.get(`/api/events/${eventId}`)
+    api.get(`/api/events/${id}`)
       .then(setEvent)
       .catch(err => setError(err.message))
       .finally(() => setLoading(false))
-  }, [eventId])
+  }, [id])
 
   const handleOrder = async () => {
     if (!user) {
@@ -231,7 +407,7 @@ function EventDetail() {
     }
     setProcessing(true)
     try {
-      const orderData = await api.post('/api/orders', { eventId, quantity })
+      const orderData = await api.post('/api/orders', { eventId: id, quantity })
       const paymentData = await api.post(`/api/orders/${orderData.id}/pay`, { paymentMethod: 'mock' })
       setOrder(paymentData)
     } catch (err) {
@@ -241,7 +417,23 @@ function EventDetail() {
     }
   }
 
-  if (loading) return <div className="loading"><div className="spinner"></div></div>
+  const handleWaitlist = async () => {
+    if (!user) {
+      navigate('/login')
+      return
+    }
+    setWaitlistLoading(true)
+    try {
+      await api.post('/api/waitlist', { eventId: id })
+      setInWaitlist(true)
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setWaitlistLoading(false)
+    }
+  }
+
+  if (loading) return <div className="loading"><div className="spinner" /></div>
   if (error) return <div className="page"><div className="container"><div className="alert alert-error">{error}</div></div></div>
   if (!event) return <div className="page"><div className="container"><div className="alert alert-error">Événement non trouvé</div></div></div>
 
@@ -250,21 +442,22 @@ function EventDetail() {
   if (order) {
     return (
       <div className="page">
-        <VideoBackground src={videoBg} />
-        <div className="container">
-          <div className="alert alert-success mb-3">
-            Commande confirmée ! Tes billets ont été générés.
-          </div>
-          <div className="card">
-            <div className="card-body">
-              <h2 className="mb-2">Tes Billets</h2>
-              {order.tickets.map((ticket, i) => (
-                <div key={ticket.id} className="mb-2" style={{ borderBottom: '1px solid var(--glass-border)', paddingBottom: '1rem' }}>
-                  <p><strong>Billet #{i + 1}</strong></p>
-                  <img src={ticket.qrCode} alt="QR Code" className="qr-code" />
-                </div>
-              ))}
-              <Link to="/tickets" className="btn mt-2">Voir tous mes billets</Link>
+        <div className="event-detail-hero" style={{ background: `url(${videoBg}) center/cover` }}>
+          <div className="event-detail-overlay" />
+          <div className="container">
+            <div className="success-card">
+              <span className="success-icon">✓</span>
+              <h2>Commande confirmée!</h2>
+              <p>Tes billets ont été générés</p>
+              <div className="tickets-grid">
+                {order.tickets.map((ticket, i) => (
+                  <div key={ticket.id} className="ticket-preview">
+                    <img src={ticket.qrCode} alt="QR Code" />
+                    <span>Billet #{i + 1}</span>
+                  </div>
+                ))}
+              </div>
+              <Link to="/tickets" className="btn btn-primary">Voir mes billets</Link>
             </div>
           </div>
         </div>
@@ -272,48 +465,191 @@ function EventDetail() {
     )
   }
 
+  const soldOut = event.availableSeats === 0
+
   return (
-    <div className="page">
-      <VideoBackground src={videoBg} />
-      <div className="container">
-        <div className="card" style={{ backdropFilter: 'blur(20px)', background: 'rgba(255,255,255,0.05)' }}>
-          <div className="card-body">
-            <h1 className="page-title">{event.title}</h1>
-            <p className="card-text mb-2">{event.description}</p>
-            <p className="text-muted mb-1">
-              {new Date(event.date).toLocaleDateString('fr-FR', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
-            </p>
-            <p className="text-muted mb-1">{event.location}</p>
-            <p className="text-muted mb-3">{event.availableSeats} places disponibles sur {event.totalSeats}</p>
-            
-            <div className="flex-between mt-3">
-              <span className="price">Prix: {event.price.toFixed(2)} €</span>
+    <div className="page event-detail-page">
+      <div className="event-detail-hero" style={{ background: `url(${videoBg}) center/cover` }}>
+        <div className="event-detail-overlay" />
+        <div className="container event-detail-header">
+          <div className="event-detail-info">
+            <span className="event-detail-category">Concert</span>
+            <h1 className="event-detail-title">{event.title}</h1>
+            <p className="event-detail-description">{event.description}</p>
+            <div className="event-detail-meta">
+              <span className="meta-item">
+                <span className="meta-icon">📅</span>
+                {new Date(event.date).toLocaleDateString('fr-FR', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+              </span>
+              <span className="meta-item">
+                <span className="meta-icon">📍</span>
+                {event.location}
+              </span>
+              <span className="meta-item">
+                <span className="meta-icon">🎫</span>
+                {event.availableSeats} places disponibles
+              </span>
+            </div>
+          </div>
+          
+          <div className="event-detail-card">
+            <div className="price-display">
+              <span className="price-label">À partir de</span>
+              <span className="price-value">{event.price.toFixed(2)}€</span>
             </div>
             
-            {event.availableSeats > 0 && (
-              <div className="mt-3">
-                <div className="form-group">
-                  <label className="form-label">Nombre de billets</label>
-                  <input 
-                    type="number" 
-                    min="1" 
-                    max={event.availableSeats}
-                    value={quantity}
-                    onChange={e => setQuantity(Number(e.target.value))}
-                    className="form-input"
-                    style={{ maxWidth: '100px' }}
-                  />
-                </div>
-                <p className="mb-2">Total: <strong>{(event.price * quantity).toFixed(2)} €</strong></p>
+            {soldOut ? (
+              <div className="soldout-section">
+                <span className="soldout-badge">Complet</span>
                 <button 
-                  className="btn btn-primary" 
+                  className="btn btn-outline" 
+                  onClick={handleWaitlist}
+                  disabled={waitlistLoading || inWaitlist}
+                >
+                  {inWaitlist ? 'Inscrit ✓' : waitlistLoading ? 'Inscription...' : 'Rejoindre la liste d\'attente'}
+                </button>
+              </div>
+            ) : (
+              <>
+                <div className="quantity-selector">
+                  <label>Nombre de billets</label>
+                  <div className="quantity-controls">
+                    <button onClick={() => setQuantity(Math.max(1, quantity - 1))}>-</button>
+                    <span>{quantity}</span>
+                    <button onClick={() => setQuantity(Math.min(event.availableSeats, quantity + 1))}>+</button>
+                  </div>
+                </div>
+                <div className="total-display">
+                  <span>Total</span>
+                  <span>{(event.price * quantity).toFixed(2)}€</span>
+                </div>
+                <button 
+                  className="btn btn-primary btn-lg" 
                   onClick={handleOrder}
                   disabled={processing}
                 >
-                  <span>{processing ? 'Traitement...' : 'Acheter maintenant'}</span>
+                  {processing ? 'Traitement...' : 'Réserver'}
+                </button>
+              </>
+            )}
+            
+            <p className="secure-notice">🔒 Paiement sécurisé</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function Recommendations() {
+  const [events, setEvents] = useState([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    api.get('/api/recommendations')
+      .then(data => setEvents(data.events || []))
+      .catch(console.error)
+      .finally(() => setLoading(false))
+  }, [])
+
+  return (
+    <div className="page">
+      <div className="container">
+        <div className="page-header">
+          <h1 className="page-title">Recommandations</h1>
+          <p className="page-subtitle">Basé sur vos envies et les tendances</p>
+        </div>
+        <EventGrid events={events} loading={loading} title="" />
+      </div>
+    </div>
+  )
+}
+
+function Waitlist() {
+  const [entries, setEntries] = useState([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    api.get('/api/waitlist')
+      .then(data => setEntries(data.entries || []))
+      .catch(console.error)
+      .finally(() => setLoading(false))
+  }, [])
+
+  const handleRemove = async (id) => {
+    try {
+      await api.delete(`/api/waitlist/${id}`)
+      setEntries(entries.filter(e => e.id !== id))
+    } catch (err) {
+      alert(err.message)
+    }
+  }
+
+  if (loading) return <div className="loading"><div className="spinner" /></div>
+
+  return (
+    <div className="page">
+      <div className="container">
+        <h1 className="page-title">Ma liste d'attente</h1>
+        {entries.length === 0 ? (
+          <div className="empty-state">
+            <span className="empty-icon">✦</span>
+            <p>Vous n'êtes sur aucune liste d'attente</p>
+            <Link to="/events" className="btn btn-primary">Découvrir des événements</Link>
+          </div>
+        ) : (
+          <div className="waitlist-grid">
+            {entries.map(entry => (
+              <div key={entry.id} className="waitlist-card">
+                <h3>{entry.event.title}</h3>
+                <p>Position: #{entry.position}</p>
+                <p>Date: {new Date(entry.event.date).toLocaleDateString('fr-FR')}</p>
+                <button className="btn btn-outline btn-sm" onClick={() => handleRemove(entry.id)}>
+                  Quitter
                 </button>
               </div>
-            )}
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function Analytics() {
+  const [data, setData] = useState(null)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    api.get('/api/admin/analytics')
+      .then(setData)
+      .catch(console.error)
+      .finally(() => setLoading(false))
+  }, [])
+
+  if (loading) return <div className="loading"><div className="spinner" /></div>
+
+  return (
+    <div className="page">
+      <div className="container">
+        <h1 className="page-title">Tableau de bord</h1>
+        
+        <div className="stats-grid">
+          <div className="stat-card">
+            <span className="stat-value">{data?.totalEvents || 0}</span>
+            <span className="stat-label">Événements</span>
+          </div>
+          <div className="stat-card">
+            <span className="stat-value">{data?.totalOrders || 0}</span>
+            <span className="stat-label">Commandes</span>
+          </div>
+          <div className="stat-card">
+            <span className="stat-value">{data?.totalRevenue?.toFixed(2) || 0}€</span>
+            <span className="stat-label">Revenus</span>
+          </div>
+          <div className="stat-card">
+            <span className="stat-value">{data?.totalTickets || 0}</span>
+            <span className="stat-label">Billets vendus</span>
           </div>
         </div>
       </div>
@@ -341,25 +677,31 @@ function Login() {
 
   return (
     <div className="auth-page">
-      <div className="auth-card">
-        <h1 className="auth-title">Connexion</h1>
-        {error && <div className="alert alert-error">{error}</div>}
-        <form onSubmit={handleSubmit}>
-          <div className="form-group">
-            <label className="form-label">Email</label>
-            <input type="email" value={email} onChange={e => setEmail(e.target.value)} className="form-input" required />
-          </div>
-          <div className="form-group">
-            <label className="form-label">Mot de passe</label>
-            <input type="password" value={password} onChange={e => setPassword(e.target.value)} className="form-input" required />
-          </div>
-          <button type="submit" className="btn btn-primary" style={{ width: '100%' }}>
-            <span>Se connecter</span>
-          </button>
-        </form>
-        <p className="text-center mt-2 text-muted">
-          Pas de compte ? <Link to="/register" className="text-accent">S'inscrire</Link>
-        </p>
+      <div className="auth-container">
+        <div className="auth-visual">
+          <h2>Bon retour!</h2>
+          <p>Connectez-vous pour accéder à vos billets et commandes</p>
+        </div>
+        <div className="auth-form-container">
+          <h1 className="auth-title">Connexion</h1>
+          {error && <div className="alert alert-error">{error}</div>}
+          <form onSubmit={handleSubmit}>
+            <div className="form-group">
+              <label className="form-label">Email</label>
+              <input type="email" value={email} onChange={e => setEmail(e.target.value)} className="form-input" required />
+            </div>
+            <div className="form-group">
+              <label className="form-label">Mot de passe</label>
+              <input type="password" value={password} onChange={e => setPassword(e.target.value)} className="form-input" required />
+            </div>
+            <button type="submit" className="btn btn-primary btn-lg" style={{ width: '100%' }}>
+              Se connecter
+            </button>
+          </form>
+          <p className="text-center mt-3 text-muted">
+            Pas de compte? <Link to="/register" className="text-accent">S'inscrire</Link>
+          </p>
+        </div>
       </div>
     </div>
   )
@@ -386,29 +728,35 @@ function Register() {
 
   return (
     <div className="auth-page">
-      <div className="auth-card">
-        <h1 className="auth-title">Inscription</h1>
-        {error && <div className="alert alert-error">{error}</div>}
-        <form onSubmit={handleSubmit}>
-          <div className="form-group">
-            <label className="form-label">Nom</label>
-            <input type="text" value={name} onChange={e => setName(e.target.value)} className="form-input" required />
-          </div>
-          <div className="form-group">
-            <label className="form-label">Email</label>
-            <input type="email" value={email} onChange={e => setEmail(e.target.value)} className="form-input" required />
-          </div>
-          <div className="form-group">
-            <label className="form-label">Mot de passe</label>
-            <input type="password" value={password} onChange={e => setPassword(e.target.value)} className="form-input" minLength={6} required />
-          </div>
-          <button type="submit" className="btn btn-primary" style={{ width: '100%' }}>
-            <span>S'inscrire</span>
-          </button>
-        </form>
-        <p className="text-center mt-2 text-muted">
-          Déjà un compte ? <Link to="/login" className="text-accent">Se connecter</Link>
-        </p>
+      <div className="auth-container">
+        <div className="auth-visual">
+          <h2>Rejoignez l'aventure!</h2>
+          <p>Créez votre compte pour réserver vos billets</p>
+        </div>
+        <div className="auth-form-container">
+          <h1 className="auth-title">Inscription</h1>
+          {error && <div className="alert alert-error">{error}</div>}
+          <form onSubmit={handleSubmit}>
+            <div className="form-group">
+              <label className="form-label">Nom</label>
+              <input type="text" value={name} onChange={e => setName(e.target.value)} className="form-input" required />
+            </div>
+            <div className="form-group">
+              <label className="form-label">Email</label>
+              <input type="email" value={email} onChange={e => setEmail(e.target.value)} className="form-input" required />
+            </div>
+            <div className="form-group">
+              <label className="form-label">Mot de passe</label>
+              <input type="password" value={password} onChange={e => setPassword(e.target.value)} className="form-input" minLength={6} required />
+            </div>
+            <button type="submit" className="btn btn-primary btn-lg" style={{ width: '100%' }}>
+              S'inscrire
+            </button>
+          </form>
+          <p className="text-center mt-3 text-muted">
+            Déjà un compte? <Link to="/login" className="text-accent">Se connecter</Link>
+          </p>
+        </div>
       </div>
     </div>
   )
@@ -425,31 +773,31 @@ function Orders() {
       .finally(() => setLoading(false))
   }, [])
 
-  if (loading) return <div className="loading"><div className="spinner"></div></div>
+  if (loading) return <div className="loading"><div className="spinner" /></div>
 
   return (
     <div className="page">
       <div className="container">
-        <h1 className="page-title">Mes Commandes</h1>
+        <h1 className="page-title">Mes commandes</h1>
         {orders.length === 0 ? (
-          <p className="text-center text-muted">Aucune commande</p>
+          <div className="empty-state">
+            <span className="empty-icon">✦</span>
+            <p>Aucune commande</p>
+            <Link to="/events" className="btn btn-primary">Découvrir des événements</Link>
+          </div>
         ) : (
-          <div className="grid gap-2">
+          <div className="orders-list">
             {orders.map(order => (
-              <div key={order.id} className="card">
-                <div className="card-body">
-                  <div className="flex-between">
-                    <div>
-                      <h3>{order.event.title}</h3>
-                      <p className="card-text text-muted">{new Date(order.event.date).toLocaleDateString('fr-FR')}</p>
-                      <p className="card-text text-muted">{order.event.location}</p>
-                      <p>Quantité: {order.quantity}</p>
-                      <p>Total: <strong>{order.totalPrice.toFixed(2)} €</strong></p>
-                    </div>
-                    <span className={`badge badge-${order.status === 'PAID' ? 'success' : order.status === 'PENDING' ? 'warning' : 'danger'}`}>
-                      {order.status}
-                    </span>
-                  </div>
+              <div key={order.id} className="order-card">
+                <div className="order-info">
+                  <h3>{order.event.title}</h3>
+                  <p>{new Date(order.event.date).toLocaleDateString('fr-FR')} • {order.event.location}</p>
+                  <p>{order.quantity} billet(s) • Total: {order.totalPrice.toFixed(2)}€</p>
+                </div>
+                <div className="order-status">
+                  <span className={`status-badge status-${order.status.toLowerCase()}`}>
+                    {order.status === 'PAID' ? 'Confirmé' : order.status === 'PENDING' ? 'En attente' : 'Annulé'}
+                  </span>
                 </div>
               </div>
             ))}
@@ -463,6 +811,7 @@ function Orders() {
 function Tickets() {
   const [tickets, setTickets] = useState([])
   const [loading, setLoading] = useState(true)
+  const [selectedTicket, setSelectedTicket] = useState(null)
 
   useEffect(() => {
     api.get('/api/tickets')
@@ -471,32 +820,54 @@ function Tickets() {
       .finally(() => setLoading(false))
   }, [])
 
-  if (loading) return <div className="loading"><div className="spinner"></div></div>
+  if (loading) return <div className="loading"><div className="spinner" /></div>
 
   return (
     <div className="page">
       <div className="container">
-        <h1 className="page-title">Mes Billets</h1>
+        <h1 className="page-title">Mes billets</h1>
         {tickets.length === 0 ? (
-          <p className="text-center text-muted">Aucun billet</p>
+          <div className="empty-state">
+            <span className="empty-icon">✦</span>
+            <p>Aucun billet</p>
+            <Link to="/events" className="btn btn-primary">Réserver un événement</Link>
+          </div>
         ) : (
-          <div className="grid grid-2">
+          <div className="tickets-grid-view">
             {tickets.map(ticket => (
-              <div key={ticket.id} className="card">
-                <div className="card-body text-center">
-                  <h3>{ticket.event.title}</h3>
-                  <p className="card-text text-muted">{new Date(ticket.event.date).toLocaleDateString('fr-FR')}</p>
-                  <p className="card-text text-muted">{ticket.event.location}</p>
-                  <img src={ticket.qrCode} alt="QR Code" className="qr-code mt-2" />
-                  <p className={`badge mt-2 ${ticket.scanned ? 'badge-danger' : 'badge-success'}`}>
+              <div 
+                key={ticket.id} 
+                className="ticket-card"
+                onClick={() => setSelectedTicket(ticket)}
+              >
+                <div className="ticket-card-header">
+                  <span className="ticket-event">{ticket.event.title}</span>
+                  <span className={`ticket-status ${ticket.scanned ? 'used' : 'valid'}`}>
                     {ticket.scanned ? 'Utilisé' : 'Valide'}
-                  </p>
+                  </span>
+                </div>
+                <div className="ticket-card-body">
+                  <p className="ticket-date">{new Date(ticket.event.date).toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' })}</p>
+                  <p className="ticket-location">{ticket.event.location}</p>
+                  <img src={ticket.qrCode} alt="QR Code" className="ticket-qr" />
                 </div>
               </div>
             ))}
           </div>
         )}
       </div>
+      
+      {selectedTicket && (
+        <div className="modal-overlay" onClick={() => setSelectedTicket(null)}>
+          <div className="modal-content ticket-modal" onClick={e => e.stopPropagation()}>
+            <button className="modal-close" onClick={() => setSelectedTicket(null)}>×</button>
+            <h3>{selectedTicket.event.title}</h3>
+            <p>{new Date(selectedTicket.event.date).toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' })}</p>
+            <p>{selectedTicket.event.location}</p>
+            <img src={selectedTicket.qrCode} alt="QR Code" className="qr-code-lg" />
+          </div>
+        </div>
+      )}
     </div>
   )
 }
@@ -535,71 +906,86 @@ function Admin() {
   }
 
   return (
-    <div className="page">
+    <div className="page admin-page">
       <div className="container">
         <h1 className="page-title">Administration</h1>
         
-        <div className="flex gap-2 mb-3">
-          <button className={`btn ${activeTab === 'events' ? 'btn-primary' : 'btn-outline'}`} onClick={() => setActiveTab('events')}>Événements</button>
-          <button className={`btn ${activeTab === 'orders' ? 'btn-primary' : 'btn-outline'}`} onClick={() => setActiveTab('orders')}>Commandes</button>
+        <div className="admin-tabs">
+          <button 
+            className={`admin-tab ${activeTab === 'events' ? 'active' : ''}`}
+            onClick={() => setActiveTab('events')}
+          >
+            Événements
+          </button>
+          <button 
+            className={`admin-tab ${activeTab === 'orders' ? 'active' : ''}`}
+            onClick={() => setActiveTab('orders')}
+          >
+            Commandes
+          </button>
+          <button 
+            className={`admin-tab ${activeTab === 'analytics' ? 'active' : ''}`}
+            onClick={() => setActiveTab('analytics')}
+          >
+            Analytics
+          </button>
         </div>
 
         {activeTab === 'events' && (
           <>
-            <button className="btn mb-3" onClick={() => setShowEventForm(!showEventForm)}>
-              <span>{showEventForm ? 'Annuler' : '+ Nouvel événement'}</span>
+            <button className="btn mb-4" onClick={() => setShowEventForm(!showEventForm)}>
+              {showEventForm ? 'Annuler' : '+ Nouvel événement'}
             </button>
             
             {showEventForm && (
-              <div className="card mb-3">
-                <div className="card-body">
-                  <form onSubmit={handleCreateEvent}>
-                    <div className="grid grid-2">
-                      <div className="form-group">
-                        <label className="form-label">Titre</label>
-                        <input type="text" value={formData.title} onChange={e => setFormData({...formData, title: e.target.value})} className="form-input" required />
-                      </div>
-                      <div className="form-group">
-                        <label className="form-label">Lieu</label>
-                        <input type="text" value={formData.location} onChange={e => setFormData({...formData, location: e.target.value})} className="form-input" required />
-                      </div>
+              <div className="admin-form-card">
+                <form onSubmit={handleCreateEvent}>
+                  <div className="form-row">
+                    <div className="form-group">
+                      <label className="form-label">Titre</label>
+                      <input type="text" value={formData.title} onChange={e => setFormData({...formData, title: e.target.value})} className="form-input" required />
                     </div>
                     <div className="form-group">
-                      <label className="form-label">Description</label>
-                      <textarea value={formData.description} onChange={e => setFormData({...formData, description: e.target.value})} className="form-input" required />
+                      <label className="form-label">Lieu</label>
+                      <input type="text" value={formData.location} onChange={e => setFormData({...formData, location: e.target.value})} className="form-input" required />
+                    </div>
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label">Description</label>
+                    <textarea value={formData.description} onChange={e => setFormData({...formData, description: e.target.value})} className="form-input" required />
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label">URL Vidéo</label>
+                    <input type="url" value={formData.videoUrl} onChange={e => setFormData({...formData, videoUrl: e.target.value})} className="form-input" placeholder="https://..." />
+                  </div>
+                  <div className="form-row">
+                    <div className="form-group">
+                      <label className="form-label">Date</label>
+                      <input type="datetime-local" value={formData.date} onChange={e => setFormData({...formData, date: e.target.value})} className="form-input" required />
                     </div>
                     <div className="form-group">
-                      <label className="form-label">URL Vidéo (background)</label>
-                      <input type="url" value={formData.videoUrl} onChange={e => setFormData({...formData, videoUrl: e.target.value})} className="form-input" placeholder="https://..." />
-                    </div>
-                    <div className="grid grid-2">
-                      <div className="form-group">
-                        <label className="form-label">Date</label>
-                        <input type="datetime-local" value={formData.date} onChange={e => setFormData({...formData, date: e.target.value})} className="form-input" required />
-                      </div>
-                      <div className="form-group">
-                        <label className="form-label">Prix (€)</label>
-                        <input type="number" step="0.01" value={formData.price} onChange={e => setFormData({...formData, price: e.target.value})} className="form-input" required />
-                      </div>
+                      <label className="form-label">Prix (€)</label>
+                      <input type="number" step="0.01" value={formData.price} onChange={e => setFormData({...formData, price: e.target.value})} className="form-input" required />
                     </div>
                     <div className="form-group">
-                      <label className="form-label">Places totales</label>
+                      <label className="form-label">Places</label>
                       <input type="number" value={formData.totalSeats} onChange={e => setFormData({...formData, totalSeats: e.target.value})} className="form-input" required />
                     </div>
-                    <button type="submit" className="btn btn-primary"><span>Créer l'événement</span></button>
-                  </form>
-                </div>
+                  </div>
+                  <button type="submit" className="btn btn-primary">Créer</button>
+                </form>
               </div>
             )}
 
-            <div className="card">
-              <table className="table">
+            <div className="admin-table-container">
+              <table className="admin-table">
                 <thead>
                   <tr>
-                    <th>Titre</th>
+                    <th>Événement</th>
                     <th>Date</th>
                     <th>Places</th>
                     <th>Prix</th>
+                    <th>Actions</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -608,7 +994,10 @@ function Admin() {
                       <td>{event.title}</td>
                       <td>{new Date(event.date).toLocaleDateString('fr-FR')}</td>
                       <td>{event.availableSeats}/{event.totalSeats}</td>
-                      <td>{event.price.toFixed(2)} €</td>
+                      <td>{event.price.toFixed(2)}€</td>
+                      <td>
+                        <button className="btn btn-sm btn-outline">Modifier</button>
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -618,8 +1007,8 @@ function Admin() {
         )}
 
         {activeTab === 'orders' && (
-          <div className="card">
-            <table className="table">
+          <div className="admin-table-container">
+            <table className="admin-table">
               <thead>
                 <tr>
                   <th>Client</th>
@@ -632,17 +1021,23 @@ function Admin() {
               <tbody>
                 {orders.map(order => (
                   <tr key={order.id}>
-                    <td>{order.user?.name}<br/><small className="text-muted">{order.user?.email}</small></td>
+                    <td>{order.user?.name}</td>
                     <td>{order.event?.title}</td>
                     <td>{order.quantity}</td>
-                    <td>{order.totalPrice.toFixed(2)} €</td>
-                    <td><span className={`badge badge-${order.status === 'PAID' ? 'success' : 'warning'}`}>{order.status}</span></td>
+                    <td>{order.totalPrice.toFixed(2)}€</td>
+                    <td>
+                      <span className={`status-badge status-${order.status.toLowerCase()}`}>
+                        {order.status}
+                      </span>
+                    </td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
         )}
+
+        {activeTab === 'analytics' && <Analytics />}
       </div>
     </div>
   )
@@ -651,7 +1046,7 @@ function Admin() {
 function ProtectedRoute({ children }) {
   const { user, loading } = useAuth()
   
-  if (loading) return <div className="loading"><div className="spinner"></div></div>
+  if (loading) return <div className="loading"><div className="spinner" /></div>
   if (!user) return <Navigate to="/login" />
   
   return children
@@ -664,9 +1059,12 @@ export default function App() {
         <Navbar />
         <Routes>
           <Route path="/" element={<Home />} />
+          <Route path="/events" element={<Events />} />
+          <Route path="/event/:id" element={<EventDetail />} />
           <Route path="/login" element={<Login />} />
           <Route path="/register" element={<Register />} />
-          <Route path="/event/:id" element={<EventDetail />} />
+          <Route path="/recommendations" element={<Recommendations />} />
+          <Route path="/waitlist" element={<ProtectedRoute><Waitlist /></ProtectedRoute>} />
           <Route path="/orders" element={<ProtectedRoute><Orders /></ProtectedRoute>} />
           <Route path="/tickets" element={<ProtectedRoute><Tickets /></ProtectedRoute>} />
           <Route path="/admin" element={<ProtectedRoute><Admin /></ProtectedRoute>} />

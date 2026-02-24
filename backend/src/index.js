@@ -11,9 +11,12 @@ import eventRoutes from './modules/events/events.routes.js';
 import orderRoutes from './modules/orders/orders.routes.js';
 import ticketRoutes from './modules/tickets/tickets.routes.js';
 import paymentRoutes from './modules/payment/payment.routes.js';
+import waitlistRoutes from './modules/waitlist/waitlist.routes.js';
+import recommendationsRoutes from './modules/recommendations/recommendations.routes.js';
+import analyticsRoutes from './modules/analytics/analytics.routes.js';
 import { errorHandler } from './shared/middleware/errorHandler.js';
-import { securityMiddleware, rateLimiters } from './shared/middleware/security.js';
-import { cacheMiddleware } from './shared/middleware/cache.js';
+import { rateLimiters } from './shared/middleware/security.js';
+import { redis } from './shared/middleware/cache.js';
 
 dotenv.config();
 
@@ -29,7 +32,10 @@ app.use(helmet({
       defaultSrc: ["'self'"],
       scriptSrc: ["'self'", "'unsafe-inline'"],
       styleSrc: ["'self'", "'unsafe-inline'"],
-      imgSrc: ["'self'", "data:", "blob:"],
+      imgSrc: ["'self'", "data:", "blob:", "https://assets.mixkit.co"],
+      mediaSrc: ["'self'", "https://assets.mixkit.co"],
+      connectSrc: ["'self'", "http://localhost:8081"],
+      manifestSrc: ["'self'", "/manifest.json"]
     }
   },
   hsts: {
@@ -57,9 +63,36 @@ app.use('/api/events', eventRoutes);
 app.use('/api/orders', orderRoutes);
 app.use('/api/tickets', ticketRoutes);
 app.use('/api/payments', paymentRoutes);
+app.use('/api/waitlist', waitlistRoutes);
+app.use('/api/recommendations', recommendationsRoutes);
+app.use('/api/admin/analytics', analyticsRoutes);
 
-app.get('/api/health', (req, res) => {
-  res.json({ status: 'ok', timestamp: new Date().toISOString() });
+app.get('/api/health', async (req, res) => {
+  let dbStatus = 'ok';
+  let redisStatus = 'ok';
+  
+  try {
+    await prisma.$queryRaw`SELECT 1`;
+  } catch {
+    dbStatus = 'error';
+  }
+  
+  if (redis) {
+    try {
+      await redis.ping();
+    } catch {
+      redisStatus = 'error';
+    }
+  } else {
+    redisStatus = 'disabled';
+  }
+  
+  res.json({ 
+    status: dbStatus === 'ok' ? 'ok' : 'degraded',
+    timestamp: new Date().toISOString(),
+    version: '1.0.0',
+    services: { db: dbStatus, redis: redisStatus }
+  });
 });
 
 app.use(errorHandler);
@@ -84,7 +117,7 @@ async function seedDatabase() {
       console.log('✅ Admin created');
 
       const events = [
-        { title: 'Concert Rock Stars', description: 'Le plus grand concert de rock de lannée', date: new Date('2026-06-15T20:00:00'), location: 'Stade de France, Paris', price: 89.99, totalSeats: 5000, availableSeats: 5000, videoUrl: 'https://assets.mixkit.co/videos/preview/mixkit-concert-crowd-cheering-and-flashing-lights-4399-large.mp4' },
+        { title: 'Concert Rock Stars', description: 'Le plus grand concert de rock', date: new Date('2026-06-15T20:00:00'), location: 'Stade de France, Paris', price: 89.99, totalSeats: 5000, availableSeats: 5000, videoUrl: 'https://assets.mixkit.co/videos/preview/mixkit-concert-crowd-cheering-and-flashing-lights-4399-large.mp4' },
         { title: 'Festival de Jazz', description: '3 jours de jazz en plein air', date: new Date('2026-07-20T18:00:00'), location: 'Parc de la Villette, Paris', price: 150.00, totalSeats: 2000, availableSeats: 2000, videoUrl: 'https://assets.mixkit.co/videos/preview/mixkit-dj-playing-music-in-a-club-4038-large.mp4' },
         { title: 'Match de Football', description: 'PSG vs Olympique de Marseille', date: new Date('2026-03-10T21:00:00'), location: 'Parc des Princes, Paris', price: 120.00, totalSeats: 45000, availableSeats: 45000, videoUrl: 'https://assets.mixkit.co/videos/preview/mixkit-football-stadium-crowd-watching-the-game-4554-large.mp4' },
         { title: 'Théâtre: Le Roi Lion', description: 'Comédie musicale Disney', date: new Date('2026-04-05T19:30:00'), location: 'Théâtre Mogador, Paris', price: 95.00, totalSeats: 1800, availableSeats: 1800, videoUrl: 'https://assets.mixkit.co/videos/preview/mixkit-spotlights-moving-on-a-stage-32795-large.mp4' },

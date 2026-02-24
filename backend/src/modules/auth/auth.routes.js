@@ -2,6 +2,7 @@ import { Router } from 'express';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import validator from 'validator';
+import { authenticate } from '../../shared/middleware/auth.js';
 
 const router = Router();
 
@@ -80,19 +81,11 @@ router.post('/login', async (req, res, next) => {
   }
 });
 
-router.get('/profile', async (req, res, next) => {
+router.get('/profile', authenticate, async (req, res, next) => {
   try {
-    const authHeader = req.headers.authorization;
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      return res.status(401).json({ error: 'Token required' });
-    }
-
-    const token = authHeader.split(' ')[1];
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
-
     const prisma = req.app.locals.prisma;
     const user = await prisma.user.findUnique({
-      where: { id: decoded.id },
+      where: { id: req.user.id },
       select: { id: true, email: true, name: true, role: true, createdAt: true }
     });
 

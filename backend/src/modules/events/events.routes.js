@@ -1,33 +1,10 @@
 import { Router } from 'express';
-import jwt from 'jsonwebtoken';
-import { invalidateCache } from '../../shared/middleware/cache.js';
+import { invalidateCache, cacheMiddleware } from '../../shared/middleware/cache.js';
+import { authenticate, requireAdmin } from '../../shared/middleware/auth.js';
 
 const router = Router();
 
-const authenticate = (req, res, next) => {
-  const authHeader = req.headers.authorization;
-  if (!authHeader || !authHeader.startsWith('Bearer ')) {
-    return res.status(401).json({ error: 'Token required' });
-  }
-
-  try {
-    const token = authHeader.split(' ')[1];
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    req.user = decoded;
-    next();
-  } catch {
-    return res.status(401).json({ error: 'Invalid token' });
-  }
-};
-
-const requireAdmin = (req, res, next) => {
-  if (req.user?.role !== 'ADMIN') {
-    return res.status(403).json({ error: 'Admin access required' });
-  }
-  next();
-};
-
-router.get('/', async (req, res, next) => {
+router.get('/', cacheMiddleware('events:', 30), async (req, res, next) => {
   try {
     const prisma = req.app.locals.prisma;
     const { page = 1, limit = 10, upcoming } = req.query;
@@ -58,16 +35,16 @@ router.get('/', async (req, res, next) => {
   }
 });
 
-router.get('/:id', async (req, res, next) => {
+router.get('/:id', cacheMiddleware('events:', 60), async (req, res, next) => {
   try {
     const prisma = req.app.locals.prisma;
     const event = await prisma.event.findUnique({
       where: { id: req.params.id },
-        select: {
-          id: true, title: true, description: true, date: true,
-          location: true, price: true, totalSeats: true,
-          availableSeats: true, imageUrl: true, videoUrl: true, createdAt: true
-        }
+      select: {
+        id: true, title: true, description: true, date: true,
+        location: true, price: true, totalSeats: true,
+        availableSeats: true, imageUrl: true, videoUrl: true, createdAt: true
+      }
     });
 
     if (!event) {
