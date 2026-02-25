@@ -1,12 +1,13 @@
 {
-  "name": "TicketHub",
-  "short_name": "TicketHub",
-  "description": "Plateforme de billetterie immersive",
-  "start_url": "/tickets",
+  "name": "TRIP - Réservation de billets",
+  "short_name": "TRIP",
+  "description": "Réservez vos billets pour les meilleurs événements : concerts, festivals, sport, théâtre et plus.",
+  "start_url": "/",
   "display": "standalone",
   "background_color": "#050508",
   "theme_color": "#FF00FF",
   "orientation": "portrait-primary",
+  "scope": "/",
   "icons": [
     {
       "src": "/icon-192.png",
@@ -22,5 +23,8 @@
     }
   ],
   "categories": ["entertainment", "shopping"],
-  "lang": "fr-FR"
+  "lang": "fr-FR",
+  "dir": "ltr",
+  "prefer_related_applications": false,
+  "iarc_rating_id": "13+"
 }

@@ -6,6 +6,7 @@ import {
   LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer, Area, AreaChart, Legend
 } from 'recharts'
+import { CalendarView } from './CalendarView.jsx'
 
 const API_URL = ''
 
@@ -130,6 +131,7 @@ function Navbar() {
         <div className="nav-search">
           <input type="text" placeholder="Rechercher un artiste, événement..."
             className="search-input"
+            aria-label="Rechercher un événement"
             onKeyDown={(e) => { if (e.key === 'Enter') { navigate(`/?search=${e.target.value}`); setOpen(false) } }} />
         </div>
 
@@ -139,11 +141,14 @@ function Navbar() {
 
         <div className={`nav-links ${open ? 'active' : ''}`}>
           <Link to="/events" className="nav-link" onClick={() => setOpen(false)}>Événements</Link>
+          <Link to="/calendar" className="nav-link" onClick={() => setOpen(false)}>Calendrier</Link>
           <Link to="/recommendations" className="nav-link" onClick={() => setOpen(false)}>Pour vous</Link>
           {user ? (
             <>
+              <Link to="/favorites" className="nav-link" onClick={() => setOpen(false)}>Favoris</Link>
               <Link to="/orders" className="nav-link" onClick={() => setOpen(false)}>Commandes</Link>
               <Link to="/tickets" className="nav-link" onClick={() => setOpen(false)}>Billets</Link>
+              <Link to="/profile" className="nav-link" onClick={() => setOpen(false)}>Profil</Link>
               {user.role === 'ADMIN' && <Link to="/admin" className="nav-link" onClick={() => setOpen(false)}>Admin</Link>}
               <div className="user-menu">
                 <span className="user-avatar">{user.name.charAt(0).toUpperCase()}</span>
@@ -182,7 +187,7 @@ function Hero() {
         <p className="hero-subtitle">Des expériences uniques. Des moments inoubliables.</p>
         <form onSubmit={handleSearch} className="hero-search">
           <input type="text" value={search} onChange={(e) => setSearch(e.target.value)}
-            placeholder="Artiste, ville, genre..." className="hero-search-input" />
+            placeholder="Artiste, ville, genre..." className="hero-search-input" aria-label="Rechercher un événement" />
           <button type="submit" className="btn btn-primary">Rechercher</button>
         </form>
         <div className="hero-categories">
@@ -212,7 +217,7 @@ function FeaturedEvents({ events }) {
             <div key={event.id} className={`featured-card featured-card-${i + 1}`} onClick={() => navigate(`/event/${event.id}`)}>
               <div className="featured-card-bg">
                 {event.videoUrl && (isYouTubeUrl(event.videoUrl)
-                  ? <iframe src={getYouTubeEmbedUrl(event.videoUrl)} frameBorder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen className="featured-card-video" title={event.title} loading="lazy" />
+                  ? <iframe src={getYouTubeEmbedUrl(event.videoUrl)} frameBorder="0" allowFullScreen className="featured-card-video" title={event.title} loading="lazy" />
                   : <div className="featured-card-image" style={{ backgroundImage: `url(${event.imageUrl || ''})` }} />
                 )}
                 <div className="featured-card-overlay" />
@@ -269,7 +274,6 @@ function EventGrid({ events, loading, title, emptyMessage }) {
                   <iframe 
                     src={getYouTubeEmbedUrl(event.videoUrl)} 
                     frameBorder="0" 
-                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" 
                     allowFullScreen 
                     className="event-card-video" 
                     title={event.title}
@@ -317,6 +321,28 @@ function Home() {
       .then(d => setEvents(d.events || [])).catch(console.error).finally(() => setLoading(false))
   }, [])
 
+  useEffect(() => {
+    const schema = {
+      "@context": "https://schema.org",
+      "@type": "Organization",
+      "name": "TRIP",
+      "url": "https://trip.example.com",
+      "logo": "https://trip.example.com/logo.png",
+      "contactPoint": {
+        "@type": "ContactPoint",
+        "telephone": "+33-1-23-45-67-89",
+        "contactType": "customer service",
+        "availableLanguage": ["French", "English"]
+      },
+      "sameAs": []
+    }
+    const script = document.createElement('script')
+    script.type = 'application/ld+json'
+    script.text = JSON.stringify(schema)
+    document.head.appendChild(script)
+    return () => { if (document.head.contains(script)) document.head.removeChild(script) }
+  }, [])
+
   const search = params.get('search'); const category = params.get('category')
   const gridTitle = search || category
     ? `Résultats${search ? ` pour "${search}"` : ''}${category ? ` — ${category}` : ''}`
@@ -350,8 +376,9 @@ function Events() {
         <h1 className="page-title">Tous les événements</h1>
         <div className="filters-bar">
           <input type="text" placeholder="Rechercher..." className="filter-input" value={filter.search}
+            aria-label="Filtrer les événements"
             onChange={e => setFilter({ ...filter, search: e.target.value })} />
-          <select className="filter-select" value={filter.category} onChange={e => setFilter({ ...filter, category: e.target.value })}>
+          <select className="filter-select" value={filter.category} onChange={e => setFilter({ ...filter, category: e.target.value })} aria-label="Filtrer par catégorie">
             <option value="">Toutes catégories</option>
             {Object.entries(CAT_LABELS).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
           </select>
@@ -382,13 +409,67 @@ function EventDetail() {
   const [processing, setProcessing] = useState(false)
   const [inWaitlist, setInWaitlist] = useState(false)
   const [paymentData, setPaymentData] = useState(null)
+  const [isFavorite, setIsFavorite] = useState(false)
   const { user } = useAuth()
   const navigate = useNavigate()
   const { id } = useParams()
 
   useEffect(() => {
     api.get(`/api/v1/events/${id}`).then(setEvent).catch(e => setError(e.message)).finally(() => setLoading(false))
-  }, [id])
+    if (user) {
+      api.get(`/api/v1/favorites/${id}/check`).then(d => setIsFavorite(d.isFavorite)).catch(() => {})
+    }
+  }, [id, user])
+
+  const toggleFavorite = async () => {
+    if (!user) { navigate('/login'); return }
+    try {
+      if (isFavorite) {
+        await api.delete(`/api/v1/favorites/${id}`)
+        setIsFavorite(false)
+      } else {
+        await api.post(`/api/v1/favorites/${id}`, {})
+        setIsFavorite(true)
+      }
+    } catch (err) { console.error(err) }
+  }
+
+  useEffect(() => {
+    if (!event) return
+    const schema = {
+      "@context": "https://schema.org",
+      "@type": "Event",
+      "name": event.title,
+      "description": event.description,
+      "startDate": event.date,
+      "endDate": event.date,
+      "eventStatus": "https://schema.org/EventScheduled",
+      "eventAttendanceMode": "https://schema.org/OfflineEventAttendanceMode",
+      "location": {
+        "@type": "Place",
+        "name": event.location,
+        "address": event.location
+      },
+      "image": event.imageUrl || event.videoUrl ? getYouTubeThumbnailUrl(event.videoUrl) : null,
+      "offers": {
+        "@type": "Offer",
+        "price": event.price,
+        "priceCurrency": "EUR",
+        "availability": event.availableSeats > 0 ? "https://schema.org/InStock" : "https://schema.org/SoldOut",
+        "validFrom": event.createdAt || new Date().toISOString()
+      },
+      "organizer": {
+        "@type": "Organization",
+        "name": "TRIP",
+        "url": "https://trip.example.com"
+      }
+    }
+    const script = document.createElement('script')
+    script.type = 'application/ld+json'
+    script.text = JSON.stringify(schema)
+    document.head.appendChild(script)
+    return () => { document.head.removeChild(script) }
+  }, [event])
 
   const handleOrder = async () => {
     if (!user) { navigate('/login'); return }
@@ -466,6 +547,21 @@ function EventDetail() {
               <span className="meta-item"><span className="meta-icon">📍</span>{event.location}</span>
               <span className="meta-item"><span className="meta-icon">🎫</span>{event.availableSeats} places disponibles</span>
             </div>
+            <div style={{ marginTop: '1rem', display: 'flex', gap: '0.5rem' }}>
+              <button className={`btn btn-sm ${isFavorite ? 'btn-primary' : 'btn-outline'}`} onClick={toggleFavorite}>
+                {isFavorite ? '♥ Favori' : '♡ Ajouter aux favoris'}
+              </button>
+              <button className="btn btn-outline btn-sm" onClick={() => {
+                const text = `Regarde cet événement : ${event.title}`
+                const url = window.location.origin + `/event/${event.id}`
+                if (navigator.share) {
+                  navigator.share({ title: event.title, text, url })
+                } else {
+                  navigator.clipboard.writeText(`${text} ${url}`)
+                  alert('Lien copié !')
+                }
+              }}>Partager</button>
+            </div>
           </div>
           <div className="event-detail-card">
             {paymentData ? (
@@ -492,9 +588,9 @@ function EventDetail() {
                     <div className="quantity-selector">
                       <label>Nombre de billets (max 10)</label>
                       <div className="quantity-controls">
-                        <button onClick={() => setQuantity(q => Math.max(1, q - 1))} disabled={quantity <= 1}>−</button>
+                        <button onClick={() => setQuantity(q => Math.max(1, q - 1))} disabled={quantity <= 1} aria-label="Diminuer la quantité">−</button>
                         <span>{quantity}</span>
-                        <button onClick={() => setQuantity(q => Math.min(Math.min(event.availableSeats, 10), q + 1))} disabled={quantity >= Math.min(event.availableSeats, 10)}>+</button>
+                        <button onClick={() => setQuantity(q => Math.min(Math.min(event.availableSeats, 10), q + 1))} disabled={quantity >= Math.min(event.availableSeats, 10)} aria-label="Augmenter la quantité">+</button>
                       </div>
                     </div>
                     <div className="total-display">
@@ -618,19 +714,33 @@ function Register() {
 
 function Orders() {
   const [orders, setOrders] = useState([]); const [loading, setLoading] = useState(true)
+  const [search, setSearch] = useState('')
   useEffect(() => {
-    api.get('/api/v1/orders').then(setOrders).catch(console.error).finally(() => setLoading(false))
+    api.get('/api/v1/orders').then(res => setOrders(res.orders || res)).catch(console.error).finally(() => setLoading(false))
   }, [])
+  const filteredOrders = orders.filter(o => 
+    o.event?.title?.toLowerCase().includes(search.toLowerCase()) ||
+    o.event?.location?.toLowerCase().includes(search.toLowerCase()) ||
+    o.id.toLowerCase().includes(search.toLowerCase())
+  )
   if (loading) return <div className="loading"><div className="spinner" /></div>
   return (
     <div className="page">
       <div className="container">
         <h1 className="page-title">Mes commandes</h1>
+        {orders.length > 0 && (
+          <div className="filters-bar">
+            <input type="text" placeholder="Rechercher une commande..." className="filter-input"
+              value={search} onChange={e => setSearch(e.target.value)} aria-label="Rechercher une commande" />
+          </div>
+        )}
         {!orders.length ? (
           <div className="empty-state"><span className="empty-icon">✦</span><p>Aucune commande</p><Link to="/events" className="btn btn-primary">Découvrir des événements</Link></div>
+        ) : !filteredOrders.length ? (
+          <div className="empty-state"><span className="empty-icon">✦</span><p>Aucun résultat pour "{search}"</p></div>
         ) : (
           <div className="orders-list">
-            {orders.map(order => (
+            {filteredOrders.map(order => (
               <div key={order.id} className="order-card">
                 <div className="order-info">
                   <h3 className="order-title">{order.event.title}</h3>
@@ -745,7 +855,7 @@ function Tickets() {
               {new Date(selectedTicket.event.date).toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' })}
             </p>
             <p style={{ color: 'rgba(255,255,255,0.5)', fontSize: '0.9rem', marginTop: '0.25rem' }}>{selectedTicket.event.location}</p>
-            <img src={selectedTicket.qrCode} alt="QR Code" className="qr-code-lg" />
+            <img src={selectedTicket.qrCode} alt="QR Code" className="qr-code-lg" loading="lazy" decoding="async" />
             {isTransferable(selectedTicket) && (
               <button className="btn btn-outline" style={{ marginTop: '1.5rem', width: '100%' }}
                 onClick={(e) => { e.stopPropagation(); setShowTransfer(true) }}>
@@ -1055,7 +1165,7 @@ function Admin() {
 
   useEffect(() => {
     if (activeTab === 'events') api.get('/api/v1/events').then(d => setEvents(d.events || [])).catch(console.error)
-    else if (activeTab === 'orders') api.get('/api/v1/orders/all').then(setOrders).catch(console.error)
+    else if (activeTab === 'orders') api.get('/api/v1/orders/all').then(d => setOrders(d.orders || d)).catch(console.error)
     else if (activeTab === 'users') api.get('/api/v1/admin/users').then(d => setUsers(d.users || [])).catch(console.error)
   }, [activeTab])
 
@@ -1512,6 +1622,200 @@ function Waitlist() {
   )
 }
 
+function Favorites() {
+  const [events, setEvents] = useState([])
+  const [loading, setLoading] = useState(true)
+  const navigate = useNavigate()
+
+  useEffect(() => {
+    api.get('/api/v1/favorites')
+      .then(d => setEvents(d.favorites || []))
+      .catch(console.error)
+      .finally(() => setLoading(false))
+  }, [])
+
+  if (loading) return <div className="loading"><div className="spinner" /></div>
+
+  return (
+    <div className="page">
+      <div className="container">
+        <h1 className="page-title">Mes favoris</h1>
+        {!events.length ? (
+          <div className="empty-state">
+            <span className="empty-icon">♡</span>
+            <p>Aucun favori yet</p>
+            <Link to="/events" className="btn btn-primary">Découvrir des événements</Link>
+          </div>
+        ) : (
+          <div className="events-grid">
+            {events.map(event => (
+              <div key={event.id} className="event-card" onClick={() => navigate(`/event/${event.id}`)}>
+                <div className="event-card-media">
+                  {event.imageUrl ? (
+                    <div className="event-card-image" style={{ backgroundImage: `url(${event.imageUrl})` }} />
+                  ) : <div className="event-card-image-placeholder"><span>✦</span></div>}
+                  <div className="event-card-overlay" />
+                  <span className="event-card-category">{CAT_LABELS[event.category?.toLowerCase()] || 'Concert'}</span>
+                </div>
+                <div className="event-card-content">
+                  <h3 className="event-card-title">{event.title}</h3>
+                  <p className="event-card-date">{new Date(event.date).toLocaleDateString('fr-FR')}</p>
+                  <p className="event-card-location">{event.location}</p>
+                  <div className="event-card-footer">
+                    <span className="event-card-price">{event.price.toFixed(2)}€</span>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function Profile() {
+  const { user, login: updateUserContext } = useAuth()
+  const [profile, setProfile] = useState(null)
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+  const [message, setMessage] = useState(null)
+  const [formData, setFormData] = useState({ name: '', bio: '' })
+  const [passwordData, setPasswordData] = useState({ currentPassword: '', newPassword: '' })
+  const [showPassword, setShowPassword] = useState(false)
+
+  useEffect(() => {
+    api.get('/api/v1/profile/profile')
+      .then(p => { setProfile(p); setFormData({ name: p.name || '', bio: p.bio || '' }) })
+      .catch(console.error)
+      .finally(() => setLoading(false))
+  }, [])
+
+  const handleSaveProfile = async (e) => {
+    e.preventDefault(); setSaving(true); setMessage(null)
+    try {
+      const updated = await api.put('/api/v1/profile/profile', formData)
+      setProfile(updated)
+      updateUserContext(updated)
+      setMessage({ type: 'success', text: 'Profil mis à jour !' })
+    } catch (err) { setMessage({ type: 'error', text: err.message }) }
+    finally { setSaving(false) }
+  }
+
+  const handleChangePassword = async (e) => {
+    e.preventDefault(); setSaving(true); setMessage(null)
+    try {
+      await api.put('/api/v1/profile/password', passwordData)
+      setMessage({ type: 'success', text: 'Mot de passe modifié !' })
+      setPasswordData({ currentPassword: '', newPassword: '' })
+    } catch (err) { setMessage({ type: 'error', text: err.message }) }
+    finally { setSaving(false) }
+  }
+
+  const handleShare = (eventData) => {
+    const text = `Regarde cet événement : ${eventData.title} - ${new Date(eventData.date).toLocaleDateString('fr-FR')}`
+    const url = window.location.origin + `/event/${eventData.id}`
+    if (navigator.share) {
+      navigator.share({ title: eventData.title, text, url })
+    } else {
+      navigator.clipboard.writeText(`${text} ${url}`)
+      setMessage({ type: 'success', text: 'Lien copié !' })
+    }
+  }
+
+  if (loading) return <div className="loading"><div className="spinner" /></div>
+
+  return (
+    <div className="page">
+      <div className="container">
+        <h1 className="page-title">Mon profil</h1>
+        
+        {message && <div className={`alert alert-${message.type}`}>{message.text}</div>}
+
+        <div className="admin-form-card">
+          <h3 style={{ marginBottom: '1rem' }}>Informations du profil</h3>
+          <form onSubmit={handleSaveProfile}>
+            <div className="form-group">
+              <label className="form-label">Nom</label>
+              <input type="text" className="form-input" value={formData.name}
+                onChange={e => setFormData({ ...formData, name: e.target.value })} required />
+            </div>
+            <div className="form-group">
+              <label className="form-label">Email</label>
+              <input type="email" className="form-input" value={user?.email || ''} disabled />
+            </div>
+            <div className="form-group">
+              <label className="form-label">Bio</label>
+              <textarea className="form-input" value={formData.bio}
+                onChange={e => setFormData({ ...formData, bio: e.target.value })} rows={3}
+                placeholder="Parle-nous de toi..." />
+            </div>
+            <button type="submit" className="btn btn-primary" disabled={saving}>
+              {saving ? 'Enregistrement...' : 'Enregistrer'}
+            </button>
+          </form>
+        </div>
+
+        <div className="admin-form-card">
+          <h3 style={{ marginBottom: '1rem' }}>Changer le mot de passe</h3>
+          <form onSubmit={handleChangePassword}>
+            <div className="form-group">
+              <label className="form-label">Mot de passe actuel</label>
+              <input type="password" className="form-input" value={passwordData.currentPassword}
+                onChange={e => setPasswordData({ ...passwordData, currentPassword: e.target.value })} required />
+            </div>
+            <div className="form-group">
+              <label className="form-label">Nouveau mot de passe</label>
+              <input type="password" className="form-input" value={passwordData.newPassword}
+                onChange={e => setPasswordData({ ...passwordData, newPassword: e.target.value })} 
+                minLength={6} required />
+            </div>
+            <button type="submit" className="btn btn-primary" disabled={saving}>
+              {saving ? 'Modification...' : 'Changer le mot de passe'}
+            </button>
+          </form>
+        </div>
+
+        <div className="admin-form-card">
+          <h3 style={{ marginBottom: '1rem' }}>Partager TRIP</h3>
+          <p style={{ color: 'rgba(255,255,255,0.6)', marginBottom: '1rem' }}>
+            Invite tes amis à découvrir TRIP et réservez vos prochains événements ensemble !
+          </p>
+          <button className="btn btn-outline" onClick={() => {
+            navigator.clipboard.writeText(window.location.origin)
+            setMessage({ type: 'success', text: 'Lien copié !' })
+          }}>
+            Copier le lien
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function Calendar() {
+  const [events, setEvents] = useState([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    api.get('/api/v1/events?upcoming=true')
+      .then(d => setEvents(d.events || []))
+      .catch(console.error)
+      .finally(() => setLoading(false))
+  }, [])
+
+  if (loading) return <div className="loading"><div className="spinner" /></div>
+
+  return (
+    <div className="page">
+      <div className="container">
+        <h1 className="page-title">Calendrier des événements</h1>
+        <CalendarView events={events} />
+      </div>
+    </div>
+  )
+}
+
 function ProtectedRoute({ children }) {
   const { user, loading } = useAuth()
   if (loading) return <div className="loading"><div className="spinner" /></div>
@@ -1531,8 +1835,11 @@ export default function App() {
           <Route path="/login" element={<Login />} />
           <Route path="/register" element={<Register />} />
           <Route path="/recommendations" element={<Recommendations />} />
+          <Route path="/calendar" element={<Calendar />} />
           <Route path="/waitlist" element={<ProtectedRoute><Waitlist /></ProtectedRoute>} />
           <Route path="/orders" element={<ProtectedRoute><Orders /></ProtectedRoute>} />
+          <Route path="/favorites" element={<ProtectedRoute><Favorites /></ProtectedRoute>} />
+          <Route path="/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
           <Route path="/tickets" element={<ProtectedRoute><Tickets /></ProtectedRoute>} />
           <Route path="/admin" element={<ProtectedRoute><Admin /></ProtectedRoute>} />
         </Routes>

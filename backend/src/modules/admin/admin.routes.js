@@ -1,23 +1,53 @@
 import { Router } from 'express';
 import bcrypt from 'bcryptjs';
 import { authenticate, requireAdmin } from '../../shared/middleware/auth.js';
+import { adminAuditLog } from '../../shared/middleware/audit.js';
 
 const router = Router();
 
 router.get('/users', authenticate, requireAdmin, async (req, res, next) => {
   try {
     const prisma = req.app.locals.prisma;
-    const users = await prisma.user.findMany({
-      select: {
-        id: true,
-        email: true,
-        name: true,
-        role: true,
-        createdAt: true
-      },
-      orderBy: { createdAt: 'desc' }
+    const { page = 1, limit = 20, search } = req.query;
+
+    const skip = (parseInt(page) - 1) * parseInt(limit);
+    const take = Math.min(parseInt(limit), 100);
+
+    const where = search
+      ? {
+          OR: [
+            { email: { contains: search, mode: 'insensitive' } },
+            { name: { contains: search, mode: 'insensitive' } }
+          ]
+        }
+      : {};
+
+    const [users, total] = await Promise.all([
+      prisma.user.findMany({
+        where,
+        select: {
+          id: true,
+          email: true,
+          name: true,
+          role: true,
+          createdAt: true
+        },
+        orderBy: { createdAt: 'desc' },
+        skip,
+        take
+      }),
+      prisma.user.count({ where })
+    ]);
+
+    res.json({
+      users,
+      pagination: {
+        page: parseInt(page),
+        limit: take,
+        total,
+        totalPages: Math.ceil(total / take)
+      }
     });
-    res.json({ users });
   } catch (err) {
     next(err);
   }
@@ -61,7 +91,7 @@ router.post('/users', authenticate, requireAdmin, async (req, res, next) => {
   }
 });
 
-router.put('/users/:id', authenticate, requireAdmin, async (req, res, next) => {
+router.put('/users/:id', authenticate, requireAdmin, adminAuditLog('UPDATE_USER'), async (req, res, next) => {
   try {
     const { id } = req.params;
     const { name, email, role } = req.body;
@@ -101,7 +131,7 @@ router.put('/users/:id', authenticate, requireAdmin, async (req, res, next) => {
   }
 });
 
-router.delete('/users/:id', authenticate, requireAdmin, async (req, res, next) => {
+router.delete('/users/:id', authenticate, requireAdmin, adminAuditLog('DELETE_USER'), async (req, res, next) => {
   try {
     const { id } = req.params;
     const prisma = req.app.locals.prisma;

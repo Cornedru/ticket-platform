@@ -203,17 +203,34 @@ router.get('/', authenticate, async (req, res, next) => {
   try {
     const prisma = req.app.locals.prisma;
     const userId = req.user.id;
+    const { page = 1, limit = 20 } = req.query;
 
-    const orders = await prisma.order.findMany({
-      where: { userId },
-      include: {
-        event: { select: { id: true, title: true, date: true, location: true, imageUrl: true } },
-        tickets: { select: { id: true, qrCode: true, scanned: true } }
-      },
-      orderBy: { createdAt: 'desc' }
+    const skip = (parseInt(page) - 1) * parseInt(limit);
+    const take = Math.min(parseInt(limit), 100);
+
+    const [orders, total] = await Promise.all([
+      prisma.order.findMany({
+        where: { userId },
+        include: {
+          event: { select: { id: true, title: true, date: true, location: true, imageUrl: true } },
+          tickets: { select: { id: true, qrCode: true, scanned: true } }
+        },
+        orderBy: { createdAt: 'desc' },
+        skip,
+        take
+      }),
+      prisma.order.count({ where: { userId } })
+    ]);
+
+    res.json({
+      orders,
+      pagination: {
+        page: parseInt(page),
+        limit: take,
+        total,
+        totalPages: Math.ceil(total / take)
+      }
     });
-
-    res.json(orders);
   } catch (err) {
     next(err);
   }
@@ -222,17 +239,34 @@ router.get('/', authenticate, async (req, res, next) => {
 router.get('/all', authenticate, requireAdmin, async (req, res, next) => {
   try {
     const prisma = req.app.locals.prisma;
+    const { page = 1, limit = 20 } = req.query;
 
-    const orders = await prisma.order.findMany({
-      include: {
-        user: { select: { id: true, email: true, name: true } },
-        event: true,
-        tickets: true
-      },
-      orderBy: { createdAt: 'desc' }
+    const skip = (parseInt(page) - 1) * parseInt(limit);
+    const take = Math.min(parseInt(limit), 100);
+
+    const [orders, total] = await Promise.all([
+      prisma.order.findMany({
+        include: {
+          user: { select: { id: true, email: true, name: true } },
+          event: true,
+          tickets: true
+        },
+        orderBy: { createdAt: 'desc' },
+        skip,
+        take
+      }),
+      prisma.order.count()
+    ]);
+
+    res.json({
+      orders,
+      pagination: {
+        page: parseInt(page),
+        limit: take,
+        total,
+        totalPages: Math.ceil(total / take)
+      }
     });
-
-    res.json(orders);
   } catch (err) {
     next(err);
   }

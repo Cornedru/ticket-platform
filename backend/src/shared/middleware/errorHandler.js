@@ -1,10 +1,17 @@
 export const errorHandler = (err, req, res, next) => {
-  console.error('Error:', err);
+  const isProduction = process.env.NODE_ENV === 'production';
+  
+  console.error('Error:', {
+    message: err.message,
+    path: req.path,
+    method: req.method,
+    timestamp: new Date().toISOString()
+  });
 
   if (err.name === 'ValidationError') {
     return res.status(400).json({
       error: 'Validation failed',
-      details: err.details
+      details: isProduction ? undefined : err.details
     });
   }
 
@@ -26,7 +33,19 @@ export const errorHandler = (err, req, res, next) => {
     });
   }
 
+  if (err.name === 'JsonWebTokenError') {
+    return res.status(401).json({
+      error: 'Invalid token'
+    });
+  }
+
+  if (err.name === 'TokenExpiredError') {
+    return res.status(401).json({
+      error: 'Token expired'
+    });
+  }
+
   res.status(err.status || 500).json({
-    error: err.message || 'Internal server error'
+    error: isProduction && !err.status ? 'Internal server error' : err.message
   });
 };

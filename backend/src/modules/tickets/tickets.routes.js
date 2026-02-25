@@ -1,9 +1,18 @@
 import { Router } from 'express';
 import { v4 as uuidv4 } from 'uuid';
 import QRCode from 'qrcode';
+import rateLimit from 'express-rate-limit';
 import { authenticate, requireAdmin } from '../../shared/middleware/auth.js';
 
 const router = Router();
+
+const scanLimiter = rateLimit({
+  windowMs: 1 * 60 * 1000,
+  max: 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Trop de scans, veuillez réessayer plus tard.' }
+});
 
 router.get('/', authenticate, async (req, res, next) => {
   try {
@@ -157,7 +166,7 @@ router.get('/:id/history', authenticate, async (req, res, next) => {
   }
 });
 
-router.post('/scan/:id', authenticate, requireAdmin, async (req, res, next) => {
+router.post('/scan/:id', authenticate, requireAdmin, scanLimiter, async (req, res, next) => {
   try {
     const { id } = req.params;
     const prisma = req.app.locals.prisma;
@@ -190,7 +199,7 @@ router.post('/scan/:id', authenticate, requireAdmin, async (req, res, next) => {
   }
 });
 
-router.post('/validate', authenticate, requireAdmin, async (req, res, next) => {
+router.post('/validate', authenticate, requireAdmin, scanLimiter, async (req, res, next) => {
   try {
     const { qrData } = req.body;
     const prisma = req.app.locals.prisma;

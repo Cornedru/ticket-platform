@@ -13,12 +13,17 @@ model User {
   password  String
   name      String
   role      Role     @default(USER)
+  bio       String?
+  avatarUrl String?
+  preferences Json?
+  pushToken String?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   orders    Order[]
   tickets   Ticket[]
   waitlist  WaitlistEntry[]
+  favorites Favorite[]
 }
 
 enum Role {
@@ -44,6 +49,8 @@ model Event {
   tickets       Ticket[]
   orders        Order[]
   waitlist      WaitlistEntry[]
+  favorites     Favorite[]
+  priceHistory  PriceHistory[]
 }
 
 enum EventCategory {
@@ -113,4 +120,25 @@ model WaitlistEntry {
   event       Event     @relation(fields: [eventId], references: [id])
 
   @@unique([userId, eventId])
+}
+
+model Favorite {
+  id        String   @id @default(uuid())
+  userId    String
+  eventId   String
+  createdAt DateTime @default(now())
+
+  user      User     @relation(fields: [userId], references: [id])
+  event     Event    @relation(fields: [eventId], references: [id])
+
+  @@unique([userId, eventId])
+}
+
+model PriceHistory {
+  id        String   @id @default(uuid())
+  eventId   String
+  price     Float
+  recordedAt DateTime @default(now())
+
+  event     Event    @relation(fields: [eventId], references: [id])
 }

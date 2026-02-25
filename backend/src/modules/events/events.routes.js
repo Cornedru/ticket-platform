@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { invalidateCache, cacheMiddleware } from '../../shared/middleware/cache.js';
 import { authenticate, requireAdmin } from '../../shared/middleware/auth.js';
 import { validate, createEventSchema } from '../../shared/middleware/validation.js';
+import { adminAuditLog } from '../../shared/middleware/audit.js';
 
 const router = Router();
 
@@ -95,7 +96,7 @@ router.get('/:id', cacheMiddleware('events:', 60), async (req, res, next) => {
   }
 });
 
-router.post('/', authenticate, requireAdmin, async (req, res, next) => {
+router.post('/', authenticate, requireAdmin, adminAuditLog('CREATE_EVENT'), async (req, res, next) => {
   try {
     const { title, description, date, location, price, totalSeats, imageUrl, videoUrl, category } = req.body;
     const prisma = req.app.locals.prisma;
@@ -121,7 +122,7 @@ router.post('/', authenticate, requireAdmin, async (req, res, next) => {
   }
 });
 
-router.put('/:id', authenticate, requireAdmin, async (req, res, next) => {
+router.put('/:id', authenticate, requireAdmin, adminAuditLog('UPDATE_EVENT'), async (req, res, next) => {
   try {
     const { id } = req.params;
     const { title, description, date, location, price, totalSeats, imageUrl, videoUrl, category } = req.body;
@@ -150,7 +151,7 @@ router.put('/:id', authenticate, requireAdmin, async (req, res, next) => {
   }
 });
 
-router.delete('/:id', authenticate, requireAdmin, async (req, res, next) => {
+router.delete('/:id', authenticate, requireAdmin, adminAuditLog('DELETE_EVENT'), async (req, res, next) => {
   try {
     const { id } = req.params;
     const prisma = req.app.locals.prisma;

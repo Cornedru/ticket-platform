@@ -47,6 +47,18 @@ app.use(helmet({
     maxAge: 31536000,
     includeSubDomains: true,
     preload: true
+  },
+  xContentTypeOptions: true,
+  nosniff: true,
+  xFrameOptions: 'DENY',
+  referrerPolicy: { policy: 'strict-origin-when-cross-origin' },
+  permissionsPolicy: {
+    features: {
+      camera: [],
+      microphone: [],
+      geolocation: [],
+      payment: []
+    }
   }
 }));
 
@@ -72,6 +84,9 @@ app.use('/api/v1/tickets', ticketRoutes);
 app.use('/api/v1/payments', paymentRoutes);
 app.use('/api/v1/waitlist', waitlistRoutes);
 app.use('/api/v1/recommendations', recommendationsRoutes);
+app.use('/api/v1/favorites', (await import('./modules/favorites/favorites.routes.js')).default);
+app.use('/api/v1/pricing', (await import('./modules/pricing/pricing.routes.js')).default);
+app.use('/api/v1/profile', (await import('./modules/profile/profile.routes.js')).default);
 app.use('/api/v1/admin/analytics', analyticsRoutes);
 app.use('/api/v1/admin', adminRoutes);
 
@@ -107,13 +122,14 @@ app.use(errorHandler);
 
 async function seedDatabase() {
   try {
+    const adminPassword = await bcrypt.hash(process.env.ADMIN_SEED_PASSWORD || 'admin123', 12);
+    
     const existingAdmin = await prisma.user.findUnique({
       where: { email: 'admin@ticket.com' }
     });
 
     if (!existingAdmin) {
       logger.info('Seeding database...');
-      const adminPassword = await bcrypt.hash('admin123', 12);
       await prisma.user.create({
         data: {
           email: 'admin@ticket.com',
@@ -122,9 +138,16 @@ async function seedDatabase() {
           role: 'ADMIN'
         }
       });
-      logger.info('Admin created');
+      logger.info('Admin created with password:', process.env.ADMIN_SEED_PASSWORD || 'admin123');
+    } else {
+      await prisma.user.update({
+        where: { email: 'admin@ticket.com' },
+        data: { password: adminPassword }
+      });
+      logger.info('Admin password updated');
+    }
 
-      const events = [
+    const events = [
         { title: 'Concert Rock Stars', description: 'Le plus grand concert de rock', date: new Date('2026-06-15T20:00:00'), location: 'Stade de France, Paris', price: 89.99, totalSeats: 5000, availableSeats: 5000, videoUrl: 'https://assets.mixkit.co/videos/preview/mixkit-concert-crowd-cheering-and-flashing-lights-4399-large.mp4', category: 'CONCERT' },
         { title: 'Festival de Jazz', description: '3 jours de jazz en plein air', date: new Date('2026-07-20T18:00:00'), location: 'Parc de la Villette, Paris', price: 150.00, totalSeats: 2000, availableSeats: 2000, videoUrl: 'https://assets.mixkit.co/videos/preview/mixkit-dj-playing-music-in-a-club-4038-large.mp4', category: 'FESTIVAL' },
         { title: 'Match de Football', description: 'PSG vs Olympique de Marseille', date: new Date('2026-03-10T21:00:00'), location: 'Parc des Princes, Paris', price: 120.00, totalSeats: 45000, availableSeats: 45000, videoUrl: 'https://assets.mixkit.co/videos/preview/mixkit-football-stadium-crowd-watching-the-game-4554-large.mp4', category: 'SPORT' },
@@ -133,17 +156,19 @@ async function seedDatabase() {
         { title: 'Spectacle d Humour', description: 'Soirée comedy avec les meilleurs humoristes', date: new Date('2026-04-20T20:30:00'), location: 'Comedy Club, Paris', price: 35.00, totalSeats: 500, availableSeats: 500, category: 'HUMOUR' }
       ];
 
-      for (const event of events) {
-        await prisma.event.create({ data: event });
+      const existingEvents = await prisma.event.count();
+      if (existingEvents === 0) {
+        for (const event of events) {
+          await prisma.event.create({ data: event });
+        }
+        logger.info({ eventsCount: events.length }, 'Events created');
+      } else {
+        logger.info('Events already exist, skipping seed');
       }
-      logger.info({ eventsCount: events.length }, 'Events created');
-    } else {
-      logger.info('Database already seeded');
+    } catch (err) {
+      logger.warn({ err: err.message }, 'Seed check failed');
     }
-  } catch (err) {
-    logger.warn({ err: err.message }, 'Seed check failed');
   }
-}
 
 const server = app.listen(PORT, '0.0.0.0', async () => {
   await seedDatabase();
