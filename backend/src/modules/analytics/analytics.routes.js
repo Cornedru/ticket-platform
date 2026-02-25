@@ -23,14 +23,18 @@ router.get('/overview', authenticate, requireAdmin, async (req, res, next) => {
       allEvents,
       ticketTransfers,
       totalTickets,
+      activeUsersCurrent,
+      activeUsersPrev,
+      totalUsers,
+      waitlistCount,
     ] = await Promise.all([
       prisma.order.findMany({
         where: { status: 'PAID', createdAt: { gte: startCurrent } },
-        select: { totalPrice: true, quantity: true, eventId: true, createdAt: true },
+        select: { totalPrice: true, quantity: true, eventId: true, createdAt: true, userId: true },
       }),
       prisma.order.findMany({
         where: { status: 'PAID', createdAt: { gte: startPrev, lt: startCurrent } },
-        select: { totalPrice: true, quantity: true },
+        select: { totalPrice: true, quantity: true, userId: true },
       }),
       prisma.order.count({ where: { status: 'PAID' } }),
       prisma.order.aggregate({ where: { status: 'PAID' }, _sum: { totalPrice: true } }),
@@ -39,6 +43,14 @@ router.get('/overview', authenticate, requireAdmin, async (req, res, next) => {
       }),
       prisma.ticket.count({ where: { transferredAt: { not: null } } }),
       prisma.ticket.count(),
+      prisma.user.count({ where: { 
+        orders: { some: { createdAt: { gte: startCurrent } } }
+      }}),
+      prisma.user.count({ where: { 
+        orders: { some: { createdAt: { gte: startPrev, lt: startCurrent } } }
+      }}),
+      prisma.user.count(),
+      prisma.waitlistEntry.count({ where: { event: { date: { gt: new Date() } } } }),
     ]);
 
     const currentRevenue = currentOrders.reduce((s, o) => s + o.totalPrice, 0);
@@ -50,18 +62,21 @@ router.get('/overview', authenticate, requireAdmin, async (req, res, next) => {
 
     const revenueByDay = {};
     const ordersByDay = {};
+    const ticketsByDate = {};
     for (let i = daysInt - 1; i >= 0; i--) {
       const d = new Date(now);
       d.setDate(now.getDate() - i);
       const key = d.toISOString().split('T')[0];
       revenueByDay[key] = 0;
       ordersByDay[key] = 0;
+      ticketsByDate[key] = 0;
     }
     currentOrders.forEach((o) => {
       const key = new Date(o.createdAt).toISOString().split('T')[0];
       if (key in revenueByDay) {
         revenueByDay[key] += o.totalPrice;
         ordersByDay[key] += 1;
+        ticketsByDate[key] += o.quantity;
       }
     });
 
@@ -132,6 +147,11 @@ router.get('/overview', authenticate, requireAdmin, async (req, res, next) => {
           current: avgOrderValue,
           trend: trend(avgOrderValue, prevAvgOrderValue),
         },
+        activeUsers: {
+          current: activeUsersCurrent,
+          trend: trend(activeUsersCurrent, activeUsersPrev),
+          total: totalUsers,
+        },
         conversionRate: {
           global: globalConversionRate,
         },
@@ -139,11 +159,15 @@ router.get('/overview', authenticate, requireAdmin, async (req, res, next) => {
           count: ticketTransfers,
           rate: transferRate,
         },
+        waitlist: {
+          count: waitlistCount,
+        },
       },
       timeSeries: Object.entries(revenueByDay).map(([date, revenue]) => ({
         date,
         revenue: Math.round(revenue * 100) / 100,
         orders: ordersByDay[date] || 0,
+        tickets: ticketsByDate[date] || 0,
       })),
       topEvents,
       period: { days: daysInt, from: startCurrent.toISOString(), to: now.toISOString() },
@@ -265,6 +289,94 @@ router.get('/export/csv', authenticate, requireAdmin, async (req, res, next) => 
     res.setHeader('Content-Type', 'text/csv; charset=utf-8');
     res.setHeader('Content-Disposition', `attachment; filename="trip-export-${Date.now()}.csv"`);
     res.send('\uFEFF' + csv);
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.get('/logs', authenticate, requireAdmin, async (req, res, next) => {
+  try {
+    const prisma = req.app.locals.prisma;
+    const days = parseInt(req.query.days) || 30;
+    const startDate = new Date();
+    startDate.setDate(startDate.getDate() - days);
+
+    const logs = [];
+
+    const recentOrders = await prisma.order.findMany({
+      where: { createdAt: { gte: startDate } },
+      include: {
+        user: { select: { name: true } },
+        event: { select: { title: true } }
+      },
+      orderBy: { createdAt: 'desc' },
+      take: 50
+    });
+
+    recentOrders.forEach(order => {
+      logs.push({
+        type: 'ORDER',
+        message: `${order.user.name} a acheté ${order.quantity} billet(s) pour "${order.event.title}" - ${order.totalPrice.toFixed(2)}€`,
+        createdAt: order.createdAt
+      });
+    });
+
+    const recentUsers = await prisma.user.findMany({
+      where: { createdAt: { gte: startDate } },
+      orderBy: { createdAt: 'desc' },
+      take: 20
+    });
+
+    recentUsers.forEach(user => {
+      logs.push({
+        type: 'USER',
+        message: `Nouvel utilisateur: ${user.name} (${user.email})`,
+        createdAt: user.createdAt
+      });
+    });
+
+    const recentTickets = await prisma.ticket.findMany({
+      where: { 
+        createdAt: { gte: startDate },
+        scanned: true
+      },
+      include: {
+        event: { select: { title: true } },
+        order: { include: { user: { select: { name: true } } } }
+      },
+      orderBy: { scannedAt: 'desc' },
+      take: 30
+    });
+
+    recentTickets.forEach(ticket => {
+      logs.push({
+        type: 'TICKET',
+        message: `Billet scanné pour "${ticket.event.title}" par ${ticket.order.user.name}`,
+        createdAt: ticket.scannedAt
+      });
+    });
+
+    const recentWaitlist = await prisma.waitlistEntry.findMany({
+      where: { createdAt: { gte: startDate } },
+      include: {
+        user: { select: { name: true } },
+        event: { select: { title: true } }
+      },
+      orderBy: { createdAt: 'desc' },
+      take: 20
+    });
+
+    recentWaitlist.forEach(entry => {
+      logs.push({
+        type: 'WAITLIST',
+        message: `${entry.user.name} rejoint la liste d'attente pour "${entry.event.title}"`,
+        createdAt: entry.createdAt
+      });
+    });
+
+    logs.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+
+    res.json({ logs: logs.slice(0, 100) });
   } catch (err) {
     next(err);
   }

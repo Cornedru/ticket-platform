@@ -14,6 +14,7 @@ import paymentRoutes from './modules/payment/payment.routes.js';
 import waitlistRoutes from './modules/waitlist/waitlist.routes.js';
 import recommendationsRoutes from './modules/recommendations/recommendations.routes.js';
 import analyticsRoutes from './modules/analytics/analytics.routes.js';
+import adminRoutes from './modules/admin/admin.routes.js';
 import { errorHandler } from './shared/middleware/errorHandler.js';
 import { rateLimiters } from './shared/middleware/security.js';
 import { redis } from './shared/middleware/cache.js';
@@ -72,6 +73,7 @@ app.use('/api/v1/payments', paymentRoutes);
 app.use('/api/v1/waitlist', waitlistRoutes);
 app.use('/api/v1/recommendations', recommendationsRoutes);
 app.use('/api/v1/admin/analytics', analyticsRoutes);
+app.use('/api/v1/admin', adminRoutes);
 
 app.get('/api/health', async (req, res) => {
   let dbStatus = 'ok';

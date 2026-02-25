@@ -95,7 +95,7 @@ router.get('/:id', cacheMiddleware('events:', 60), async (req, res, next) => {
   }
 });
 
-router.post('/', authenticate, requireAdmin, validate(createEventSchema), async (req, res, next) => {
+router.post('/', authenticate, requireAdmin, async (req, res, next) => {
   try {
     const { title, description, date, location, price, totalSeats, imageUrl, videoUrl, category } = req.body;
     const prisma = req.app.locals.prisma;

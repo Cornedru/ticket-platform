@@ -101,6 +101,23 @@ function Navbar() {
   const [open, setOpen] = useState(false)
 
   useEffect(() => { setOpen(false) }, [navigate])
+  
+  useEffect(() => {
+    if (open) {
+      document.body.style.overflow = 'hidden'
+      document.body.style.position = 'fixed'
+      document.body.style.width = '100%'
+    } else {
+      document.body.style.overflow = ''
+      document.body.style.position = ''
+      document.body.style.width = ''
+    }
+    return () => {
+      document.body.style.overflow = ''
+      document.body.style.position = ''
+      document.body.style.width = ''
+    }
+  }, [open])
 
   return (
     <nav className="navbar">
@@ -195,8 +212,8 @@ function FeaturedEvents({ events }) {
             <div key={event.id} className={`featured-card featured-card-${i + 1}`} onClick={() => navigate(`/event/${event.id}`)}>
               <div className="featured-card-bg">
                 {event.videoUrl && (isYouTubeUrl(event.videoUrl)
-                  ? <iframe src={getYouTubeEmbedUrl(event.videoUrl)} frameBorder="0" allow="autoplay; encrypted-media" allowFullScreen className="featured-card-video" title={event.title} />
-                  : <video autoPlay loop muted playsInline><source src={event.videoUrl} type="video/mp4" /></video>
+                  ? <iframe src={getYouTubeEmbedUrl(event.videoUrl)} frameBorder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen className="featured-card-video" title={event.title} loading="lazy" />
+                  : <div className="featured-card-image" style={{ backgroundImage: `url(${event.imageUrl || ''})` }} />
                 )}
                 <div className="featured-card-overlay" />
               </div>
@@ -247,12 +264,25 @@ function EventGrid({ events, loading, title, emptyMessage }) {
         {events.map(event => (
           <div key={event.id} className="event-card" onClick={() => navigate(`/event/${event.id}`)}>
             <div className="event-card-media">
-              {event.videoUrl
-                ? isYouTubeUrl(event.videoUrl)
-                  ? <iframe src={getYouTubeEmbedUrl(event.videoUrl)} frameBorder="0" allow="autoplay; encrypted-media" allowFullScreen className="event-card-video" title={event.title} />
-                  : <video autoPlay loop muted playsInline className="event-card-video"><source src={event.videoUrl} type="video/mp4" /></video>
-                : <div className="event-card-image-placeholder"><span>✦</span></div>
-              }
+              {event.videoUrl ? (
+                isYouTubeUrl(event.videoUrl) ? (
+                  <iframe 
+                    src={getYouTubeEmbedUrl(event.videoUrl)} 
+                    frameBorder="0" 
+                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" 
+                    allowFullScreen 
+                    className="event-card-video" 
+                    title={event.title}
+                    loading="lazy"
+                  />
+                ) : (
+                  <div className="event-card-video-fallback" style={{ backgroundImage: `url(${event.imageUrl || ''})` }}>
+                    <span className="video-fallback-icon">▶</span>
+                  </div>
+                )
+              ) : event.imageUrl ? (
+                <div className="event-card-image" style={{ backgroundImage: `url(${event.imageUrl})` }} />
+              ) : <div className="event-card-image-placeholder"><span>✦</span></div>}
               <div className="event-card-overlay" />
               <span className="event-card-category">{CAT_LABELS[event.category?.toLowerCase()] || 'Concert'}</span>
               {event.availableSeats < 50 && event.availableSeats > 0 && <span className="event-card-alert">⚡ {event.availableSeats} places</span>}
@@ -460,11 +490,11 @@ function EventDetail() {
                 ) : (
                   <>
                     <div className="quantity-selector">
-                      <label>Nombre de billets</label>
+                      <label>Nombre de billets (max 10)</label>
                       <div className="quantity-controls">
-                        <button onClick={() => setQuantity(q => Math.max(1, q - 1))}>−</button>
+                        <button onClick={() => setQuantity(q => Math.max(1, q - 1))} disabled={quantity <= 1}>−</button>
                         <span>{quantity}</span>
-                        <button onClick={() => setQuantity(q => Math.min(event.availableSeats, q + 1))}>+</button>
+                        <button onClick={() => setQuantity(q => Math.min(Math.min(event.availableSeats, 10), q + 1))} disabled={quantity >= Math.min(event.availableSeats, 10)}>+</button>
                       </div>
                     </div>
                     <div className="total-display">
@@ -659,6 +689,16 @@ function Tickets() {
   }
 
   if (loading) return <div className="loading"><div className="spinner" /></div>
+  
+  const groupedTickets = tickets.reduce((acc, ticket) => {
+    const eventId = ticket.event.id
+    if (!acc[eventId]) {
+      acc[eventId] = { event: ticket.event, tickets: [] }
+    }
+    acc[eventId].tickets.push(ticket)
+    return acc
+  }, {})
+  
   return (
     <div className="page">
       <div className="container">
@@ -666,17 +706,29 @@ function Tickets() {
         {!tickets.length ? (
           <div className="empty-state"><span className="empty-icon">✦</span><p>Aucun billet</p><Link to="/events" className="btn btn-primary">Réserver un événement</Link></div>
         ) : (
-          <div className="tickets-grid-view">
-            {tickets.map(ticket => (
-              <div key={ticket.id} className="ticket-card" onClick={() => setSelectedTicket(ticket)}>
-                <div className="ticket-card-header">
-                  <span className="ticket-event">{ticket.event.title}</span>
-                  <span className={`ticket-status ${ticket.scanned ? 'used' : 'valid'}`}>{ticket.scanned ? 'Utilisé' : 'Valide'}</span>
+          <div className="tickets-container">
+            {Object.values(groupedTickets).map(group => (
+              <div key={group.event.id} className="ticket-group-card">
+                <div className="ticket-group-info">
+                  <h3 className="ticket-group-title">{group.event.title}</h3>
+                  <p className="ticket-group-meta">{new Date(group.event.date).toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' })} • {group.event.location}</p>
+                  <span className="ticket-group-count">{group.tickets.length} billet{group.tickets.length > 1 ? 's' : ''}</span>
                 </div>
-                <div className="ticket-card-body">
-                  <p className="ticket-date">{new Date(ticket.event.date).toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' })}</p>
-                  <p className="ticket-location">{ticket.event.location}</p>
-                  <img src={ticket.qrCode} alt="QR Code" className="ticket-qr" loading="lazy" />
+                <div className="ticket-items-list">
+                  {group.tickets.map(ticket => (
+                    <div key={ticket.id} className="ticket-item" onClick={() => setSelectedTicket(ticket)}>
+                      <div className="ticket-item-left">
+                        <img src={ticket.qrCode} alt="QR" className="ticket-item-qr" loading="lazy" />
+                        <div className="ticket-item-info">
+                          <span className={`ticket-item-status ${ticket.scanned ? 'used' : 'valid'}`}>
+                            {ticket.scanned ? 'Utilisé' : 'Valide'}
+                          </span>
+                          <span className="ticket-item-code">#{ticket.id.slice(0, 8).toUpperCase()}</span>
+                        </div>
+                      </div>
+                      <span className="ticket-item-arrow">›</span>
+                    </div>
+                  ))}
                 </div>
               </div>
             ))}
@@ -801,8 +853,12 @@ function Analytics() {
 
   useEffect(() => {
     setLoading(true)
-    api.get(`/api/v1/admin/analytics/overview?days=${period}`)
-      .then(setData).catch(console.error).finally(() => setLoading(false))
+    Promise.all([
+      api.get(`/api/v1/admin/analytics/overview?days=${period}`),
+      api.get(`/api/v1/admin/analytics/logs?days=${period}`)
+    ]).then(([overview, logs]) => {
+      setData({ ...overview, logs: logs.logs || [] })
+    }).catch(console.error).finally(() => setLoading(false))
   }, [period])
 
   const handleExportCSV = async () => {
@@ -827,9 +883,33 @@ function Analytics() {
   )
   if (!data) return <div className="alert alert-error">Impossible de charger les analytics</div>
 
-  const { kpis, timeSeries, topEvents } = data
+  const { kpis, timeSeries, topEvents, logs } = data
   const fmt = (n) => n?.toLocaleString('fr-FR', { maximumFractionDigits: 0 }) || '0'
   const fmtEur = (n) => `${n?.toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) || '0'}€`
+
+  const getLogIcon = (type) => {
+    const icons = {
+      ORDER: '🎫',
+      USER: '👤',
+      EVENT: '📅',
+      TICKET: '🎟️',
+      PAYMENT: '💳',
+      WAITLIST: '⏳'
+    }
+    return icons[type] || '📌'
+  }
+
+  const getLogColor = (type) => {
+    const colors = {
+      ORDER: 'var(--electric-magenta)',
+      USER: 'var(--psycho-cyan)',
+      EVENT: 'var(--acid-green)',
+      TICKET: 'var(--hot-orange)',
+      PAYMENT: 'var(--neon-purple)',
+      WAITLIST: 'var(--color-warning)'
+    }
+    return colors[type] || 'var(--glass-border)'
+  }
 
   return (
     <div className="analytics-container">
@@ -852,40 +932,69 @@ function Analytics() {
         <KpiCard label="Commandes" value={fmt(kpis.orders.current)} trend={kpis.orders.trend} sub={`Total: ${fmt(kpis.orders.total)}`} />
         <KpiCard label="Billets vendus" value={fmt(kpis.tickets.current)} trend={kpis.tickets.trend} sub={`Total: ${fmt(kpis.tickets.total)}`} />
         <KpiCard label="Panier moyen" value={fmtEur(kpis.avgOrderValue.current)} trend={kpis.avgOrderValue.trend} />
-        <KpiCard label="Conversion globale" value={`${kpis.conversionRate.global}%`} />
+        <KpiCard label="Utilisateurs actifs" value={fmt(kpis.activeUsers?.current || 0)} trend={kpis.activeUsers?.trend} sub={`Total: ${fmt(kpis.activeUsers?.total || 0)}`} />
+        <KpiCard label="Taux de conversion" value={`${kpis.conversionRate.global}%`} />
         <KpiCard label="Transferts billets" value={`${kpis.transfers.count}`} sub={`Taux: ${kpis.transfers.rate}%`} />
+        <KpiCard label="Liste d'attente" value={fmt(kpis.waitlist?.count || 0)} />
       </div>
 
-      <div className="chart-card">
-        <div className="chart-card-header">
-          <h3 className="chart-title">Évolution</h3>
-          <div className="chart-type-tabs">
-            <button className={`chart-tab ${chartType === 'revenue' ? 'active' : ''}`} onClick={() => setChartType('revenue')}>Revenus</button>
-            <button className={`chart-tab ${chartType === 'orders' ? 'active' : ''}`} onClick={() => setChartType('orders')}>Commandes</button>
+      <div className="analytics-row">
+        <div className="chart-card" style={{ flex: 2 }}>
+          <div className="chart-card-header">
+            <h3 className="chart-title">Évolution</h3>
+            <div className="chart-type-tabs">
+              <button className={`chart-tab ${chartType === 'revenue' ? 'active' : ''}`} onClick={() => setChartType('revenue')}>Revenus</button>
+              <button className={`chart-tab ${chartType === 'orders' ? 'active' : ''}`} onClick={() => setChartType('orders')}>Commandes</button>
+              <button className={`chart-tab ${chartType === 'tickets' ? 'active' : ''}`} onClick={() => setChartType('tickets')}>Billets</button>
+            </div>
+          </div>
+          <ResponsiveContainer width="100%" height={280}>
+            <AreaChart data={timeSeries} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+              <defs>
+                <linearGradient id="gradRevenue" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%" stopColor="#FF00FF" stopOpacity={0.3} />
+                  <stop offset="95%" stopColor="#FF00FF" stopOpacity={0} />
+                </linearGradient>
+                <linearGradient id="gradOrders" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%" stopColor="#39FF14" stopOpacity={0.3} />
+                  <stop offset="95%" stopColor="#39FF14" stopOpacity={0} />
+                </linearGradient>
+                <linearGradient id="gradTickets" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%" stopColor="#00FFFF" stopOpacity={0.3} />
+                  <stop offset="95%" stopColor="#00FFFF" stopOpacity={0} />
+                </linearGradient>
+              </defs>
+              <CartesianGrid stroke="rgba(255,255,255,0.05)" strokeDasharray="3 3" />
+              <XAxis dataKey="date" tick={{ fill: 'rgba(255,255,255,0.4)', fontSize: 11 }} tickFormatter={v => v.slice(5)} />
+              <YAxis tick={{ fill: 'rgba(255,255,255,0.4)', fontSize: 11 }} tickFormatter={v => chartType === 'revenue' ? `${v}€` : v} width={50} />
+              <Tooltip content={<CustomTooltip />} />
+              {chartType === 'revenue'
+                ? <Area type="monotone" dataKey="revenue" name="Revenus (€)" stroke="#FF00FF" strokeWidth={2} fill="url(#gradRevenue)" />
+                : chartType === 'orders'
+                  ? <Area type="monotone" dataKey="orders" name="Commandes" stroke="#39FF14" strokeWidth={2} fill="url(#gradOrders)" />
+                  : <Area type="monotone" dataKey="tickets" name="Billets" stroke="#00FFFF" strokeWidth={2} fill="url(#gradTickets)" />
+              }
+            </AreaChart>
+          </ResponsiveContainer>
+        </div>
+
+        <div className="chart-card" style={{ flex: 1, minWidth: 280 }}>
+          <div className="chart-card-header">
+            <h3 className="chart-title">Activité récente</h3>
+          </div>
+          <div className="activity-log">
+            {logs?.slice(0, 10).map((log, i) => (
+              <div key={i} className="activity-item" style={{ borderLeftColor: getLogColor(log.type) }}>
+                <span className="activity-icon">{getLogIcon(log.type)}</span>
+                <div className="activity-content">
+                  <span className="activity-message">{log.message}</span>
+                  <span className="activity-time">{new Date(log.createdAt).toLocaleString('fr-FR')}</span>
+                </div>
+              </div>
+            ))}
+            {!logs?.length && <p style={{ color: 'rgba(255,255,255,0.5)', textAlign: 'center', padding: '1rem' }}>Aucune activité</p>}
           </div>
         </div>
-        <ResponsiveContainer width="100%" height={260}>
-          <AreaChart data={timeSeries} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
-            <defs>
-              <linearGradient id="gradRevenue" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="5%" stopColor="#FF00FF" stopOpacity={0.3} />
-                <stop offset="95%" stopColor="#FF00FF" stopOpacity={0} />
-              </linearGradient>
-              <linearGradient id="gradOrders" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="5%" stopColor="#39FF14" stopOpacity={0.3} />
-                <stop offset="95%" stopColor="#39FF14" stopOpacity={0} />
-              </linearGradient>
-            </defs>
-            <CartesianGrid stroke="rgba(255,255,255,0.05)" strokeDasharray="3 3" />
-            <XAxis dataKey="date" tick={{ fill: 'rgba(255,255,255,0.4)', fontSize: 11 }} tickFormatter={v => v.slice(5)} />
-            <YAxis tick={{ fill: 'rgba(255,255,255,0.4)', fontSize: 11 }} tickFormatter={v => chartType === 'revenue' ? `${v}€` : v} width={50} />
-            <Tooltip content={<CustomTooltip />} />
-            {chartType === 'revenue'
-              ? <Area type="monotone" dataKey="revenue" name="Revenus (€)" stroke="#FF00FF" strokeWidth={2} fill="url(#gradRevenue)" />
-              : <Area type="monotone" dataKey="orders" name="Commandes" stroke="#39FF14" strokeWidth={2} fill="url(#gradOrders)" />
-            }
-          </AreaChart>
-        </ResponsiveContainer>
       </div>
 
       {topEvents?.length > 0 && (
@@ -896,7 +1005,11 @@ function Analytics() {
           <div className="top-events-list">
             {topEvents.map((event, i) => (
               <div key={event.id} className="top-event-row">
-                <div className="top-event-rank">#{i + 1}</div>
+                <div className="top-event-rank" style={{ 
+                  background: i === 0 ? 'linear-gradient(135deg, #FFD700, #FFA500)' : i === 1 ? 'linear-gradient(135deg, #C0C0C0, #A0A0A0)' : i === 2 ? 'linear-gradient(135deg, #CD7F32, #8B4513)' : 'var(--glass-bg)',
+                  WebkitBackgroundClip: 'text',
+                  WebkitTextFillColor: 'transparent'
+                }}>#{i + 1}</div>
                 <div className="top-event-info">
                   <div className="top-event-name">{event.title}</div>
                   <div className="top-event-meta">
@@ -909,7 +1022,7 @@ function Analytics() {
               </div>
             ))}
           </div>
-          <ResponsiveContainer width="100%" height={180} style={{ marginTop: '1.5rem' }}>
+          <ResponsiveContainer width="100%" height={200} style={{ marginTop: '1.5rem' }}>
             <BarChart data={topEvents} margin={{ top: 0, right: 8, left: 0, bottom: 24 }}>
               <CartesianGrid stroke="rgba(255,255,255,0.05)" strokeDasharray="3 3" vertical={false} />
               <XAxis dataKey="title" tick={{ fill: 'rgba(255,255,255,0.4)', fontSize: 10 }}
@@ -927,9 +1040,15 @@ function Analytics() {
 
 function Admin() {
   const [events, setEvents] = useState([]); const [orders, setOrders] = useState([])
+  const [users, setUsers] = useState([])
   const [activeTab, setActiveTab] = useState('events')
   const [showEventForm, setShowEventForm] = useState(false); const [editingEvent, setEditingEvent] = useState(null)
+  const [editingUser, setEditingUser] = useState(null); const [showUserForm, setShowUserForm] = useState(false)
+  const [showUserHistory, setShowUserHistory] = useState(false); const [userHistory, setUserHistory] = useState(null)
   const [formData, setFormData] = useState({ title: '', description: '', date: '', location: '', price: '', totalSeats: '', videoUrl: '', category: 'CONCERT' })
+  const [userFormData, setUserFormData] = useState({ name: '', email: '', role: 'USER' })
+  const [userSearch, setUserSearch] = useState('')
+  const [orderSearch, setOrderSearch] = useState('')
   const { user } = useAuth()
 
   const resetForm = () => { setFormData({ title: '', description: '', date: '', location: '', price: '', totalSeats: '', videoUrl: '', category: 'CONCERT' }); setEditingEvent(null) }
@@ -937,13 +1056,64 @@ function Admin() {
   useEffect(() => {
     if (activeTab === 'events') api.get('/api/v1/events').then(d => setEvents(d.events || [])).catch(console.error)
     else if (activeTab === 'orders') api.get('/api/v1/orders/all').then(setOrders).catch(console.error)
+    else if (activeTab === 'users') api.get('/api/v1/admin/users').then(d => setUsers(d.users || [])).catch(console.error)
   }, [activeTab])
+
+  const filteredUsers = users.filter(u => 
+    u.name.toLowerCase().includes(userSearch.toLowerCase()) ||
+    u.email.toLowerCase().includes(userSearch.toLowerCase())
+  )
+
+  const filteredOrders = orders.filter(o => 
+    o.user?.name?.toLowerCase().includes(orderSearch.toLowerCase()) ||
+    o.user?.email?.toLowerCase().includes(orderSearch.toLowerCase()) ||
+    o.event?.title?.toLowerCase().includes(orderSearch.toLowerCase())
+  )
+
+  const handleViewUserHistory = async (u) => {
+    try {
+      const [ordersData, ticketsData] = await Promise.all([
+        api.get(`/api/v1/admin/users/${u.id}/orders`),
+        api.get(`/api/v1/admin/users/${u.id}/tickets`)
+      ])
+      setUserHistory({
+        user: u,
+        orders: ordersData.orders || [],
+        tickets: ticketsData.tickets || []
+      })
+      setShowUserHistory(true)
+    } catch (err) {
+      alert(err.message)
+    }
+  }
 
   const handleCreateEvent = async (e) => {
     e.preventDefault()
     try {
-      if (editingEvent) { await api.put(`/api/v1/events/${editingEvent.id}`, formData) }
-      else { await api.post('/api/v1/events', formData) }
+      const dateValue = new Date(formData.date)
+      if (isNaN(dateValue.getTime())) {
+        alert('Date invalide')
+        return
+      }
+      const eventData = {
+        title: formData.title.trim(),
+        description: formData.description.trim(),
+        date: dateValue.toISOString(),
+        location: formData.location.trim(),
+        price: parseFloat(formData.price),
+        totalSeats: parseInt(formData.totalSeats),
+        category: formData.category ? formData.category.toUpperCase() : 'CONCERT',
+        videoUrl: formData.videoUrl.trim() || null
+      }
+      if (isNaN(eventData.price) || isNaN(eventData.totalSeats)) {
+        alert('Prix et places doivent être des nombres')
+        return
+      }
+      if (editingEvent) { 
+        await api.put(`/api/v1/events/${editingEvent.id}`, eventData) 
+      } else { 
+        await api.post('/api/v1/events', eventData) 
+      }
       setShowEventForm(false); resetForm()
       api.get('/api/v1/events').then(d => setEvents(d.events || []))
     } catch (err) { alert(err.message) }
@@ -951,7 +1121,16 @@ function Admin() {
 
   const handleEditEvent = (event) => {
     setEditingEvent(event)
-    setFormData({ title: event.title, description: event.description, date: event.date ? new Date(event.date).toISOString().slice(0, 16) : '', location: event.location, price: event.price, totalSeats: event.totalSeats, videoUrl: event.videoUrl || '', category: event.category || 'CONCERT' })
+    setFormData({ 
+      title: event.title, 
+      description: event.description, 
+      date: event.date ? new Date(event.date).toISOString().slice(0, 16) : '', 
+      location: event.location, 
+      price: event.price, 
+      totalSeats: event.totalSeats, 
+      videoUrl: event.videoUrl || '', 
+      category: event.category ? event.category.toLowerCase() : 'concert' 
+    })
     setShowEventForm(true)
   }
 
@@ -962,7 +1141,7 @@ function Admin() {
       <div className="container">
         <h1 className="page-title">Administration</h1>
         <div className="admin-tabs">
-          {[['events','Événements'],['orders','Commandes'],['analytics','Analytics']].map(([v,l]) => (
+          {[['events','Événements'],['orders','Commandes'],['users','Utilisateurs'],['analytics','Analytics']].map(([v,l]) => (
             <button key={v} className={`admin-tab ${activeTab === v ? 'active' : ''}`} onClick={() => setActiveTab(v)}>{l}</button>
           ))}
         </div>
@@ -1000,7 +1179,7 @@ function Admin() {
                 </form>
               </div>
             )}
-            <div className="admin-table-container">
+            <div className="admin-table-container desktop-only">
               <table className="admin-table">
                 <thead><tr><th>Événement</th><th>Date</th><th>Places</th><th>Prix</th><th>Catégorie</th><th>Actions</th></tr></thead>
                 <tbody>
@@ -1017,27 +1196,285 @@ function Admin() {
                 </tbody>
               </table>
             </div>
+            <div className="admin-cards mobile-only">
+              {events.map(event => (
+                <div key={event.id} className="admin-card">
+                  <div className="admin-card-header">
+                    <div>
+                      <div className="admin-card-title">{event.title}</div>
+                      <div className="admin-card-meta">{new Date(event.date).toLocaleDateString('fr-FR')}</div>
+                    </div>
+                    <span className="event-cat-badge">{CAT_LABELS[event.category?.toLowerCase()] || event.category}</span>
+                  </div>
+                  <div className="admin-card-body">
+                    <div className="admin-card-row">
+                      <span className="admin-card-label">Places</span>
+                      <span className="admin-card-value">{event.availableSeats}/{event.totalSeats}</span>
+                    </div>
+                    <div className="admin-card-row">
+                      <span className="admin-card-label">Prix</span>
+                      <span className="admin-card-value" style={{ color: 'var(--acid-green)' }}>{event.price.toFixed(2)}€</span>
+                    </div>
+                  </div>
+                  <div className="admin-card-actions">
+                    <button className="btn btn-primary" onClick={() => handleEditEvent(event)}>Modifier</button>
+                  </div>
+                </div>
+              ))}
+            </div>
           </>
         )}
 
         {activeTab === 'orders' && (
-          <div className="admin-table-container">
-            <table className="admin-table">
-              <thead><tr><th>Client</th><th>Événement</th><th>Qté</th><th>Total</th><th>Statut</th><th>Date</th></tr></thead>
-              <tbody>
-                {orders.map(order => (
-                  <tr key={order.id}>
-                    <td><div className="td-title">{order.user?.name}</div><div style={{ fontSize: '0.8rem', color: 'rgba(255,255,255,0.4)' }}>{order.user?.email}</div></td>
-                    <td className="td-title">{order.event?.title}</td>
-                    <td>{order.quantity}</td>
-                    <td style={{ whiteSpace: 'nowrap' }}>{order.totalPrice.toFixed(2)}€</td>
-                    <td><span className={`status-badge status-${order.status.toLowerCase()}`}>{{ PAID: '✓ Payé', PENDING: '⏳ Attente', CANCELLED: '✕ Annulé' }[order.status]}</span></td>
-                    <td style={{ whiteSpace: 'nowrap', fontSize: '0.85rem', color: 'rgba(255,255,255,0.5)' }}>{new Date(order.createdAt).toLocaleDateString('fr-FR')}</td>
+          <>
+            <div className="user-filters">
+              <input 
+                type="text" 
+                placeholder="Rechercher par client, événement..." 
+                className="form-input user-search"
+                value={orderSearch}
+                onChange={e => setOrderSearch(e.target.value)}
+              />
+              <span style={{ color: 'rgba(255,255,255,0.5)', fontSize: '0.9rem' }}>
+                {filteredOrders.length} commande{filteredOrders.length !== 1 ? 's' : ''}
+              </span>
+            </div>
+            <div className="admin-table-container desktop-only">
+              <table className="admin-table">
+                <thead><tr><th>Client</th><th>Événement</th><th>Qté</th><th>Total</th><th>Statut</th><th>Date</th></tr></thead>
+                <tbody>
+                  {filteredOrders.map(order => (
+                    <tr key={order.id}>
+                      <td><div className="td-title">{order.user?.name}</div><div style={{ fontSize: '0.8rem', color: 'rgba(255,255,255,0.4)' }}>{order.user?.email}</div></td>
+                      <td className="td-title">{order.event?.title}</td>
+                      <td>{order.quantity}</td>
+                      <td style={{ whiteSpace: 'nowrap' }}>{order.totalPrice.toFixed(2)}€</td>
+                      <td><span className={`status-badge status-${order.status.toLowerCase()}`}>{{ PAID: '✓ Payé', PENDING: '⏳ Attente', CANCELLED: '✕ Annulé' }[order.status]}</span></td>
+                      <td style={{ whiteSpace: 'nowrap', fontSize: '0.85rem', color: 'rgba(255,255,255,0.5)' }}>{new Date(order.createdAt).toLocaleDateString('fr-FR')}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <div className="admin-cards mobile-only">
+              {filteredOrders.map(order => (
+                <div key={order.id} className="admin-card">
+                  <div className="admin-card-header">
+                    <div>
+                      <div className="admin-card-title">{order.event?.title}</div>
+                      <div className="admin-card-meta">{order.user?.name}</div>
+                    </div>
+                    <span className={`status-badge status-${order.status.toLowerCase()}`}>{order.status === 'PAID' ? '✓ Payé' : order.status === 'PENDING' ? '⏳ Attente' : '✕ Annulé'}</span>
+                  </div>
+                  <div className="admin-card-body">
+                    <div className="admin-card-row">
+                      <span className="admin-card-label">Email</span>
+                      <span className="admin-card-value">{order.user?.email}</span>
+                    </div>
+                    <div className="admin-card-row">
+                      <span className="admin-card-label">Quantité</span>
+                      <span className="admin-card-value">{order.quantity} billet{order.quantity > 1 ? 's' : ''}</span>
+                    </div>
+                    <div className="admin-card-row">
+                      <span className="admin-card-label">Total</span>
+                      <span className="admin-card-value" style={{ color: 'var(--acid-green)' }}>{order.totalPrice.toFixed(2)}€</span>
+                    </div>
+                    <div className="admin-card-row">
+                      <span className="admin-card-label">Date</span>
+                      <span className="admin-card-value">{new Date(order.createdAt).toLocaleDateString('fr-FR')}</span>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+            {!filteredOrders.length && <div className="empty-state"><p>Aucune commande trouvée</p></div>}
+          </>
+        )}
+
+        {activeTab === 'users' && (
+          <>
+            <div className="user-filters">
+              <input 
+                type="text" 
+                placeholder="Rechercher un utilisateur..." 
+                className="form-input user-search"
+                value={userSearch}
+                onChange={e => setUserSearch(e.target.value)}
+              />
+              <button className="btn btn-primary" onClick={() => { setShowUserForm(true); setEditingUser(null); setUserFormData({ name: '', email: '', role: 'USER' }) }}>
+                + Nouvel utilisateur
+              </button>
+            </div>
+            
+            {showUserForm && (
+              <div className="admin-form-card">
+                <h3 style={{ marginBottom: '1.5rem' }}>{editingUser ? 'Modifier l\'utilisateur' : 'Nouvel utilisateur'}</h3>
+                <form onSubmit={async (e) => {
+                  e.preventDefault()
+                  try {
+                    if (editingUser) { await api.put(`/api/v1/admin/users/${editingUser.id}`, userFormData) }
+                    else { await api.post('/api/v1/admin/users', userFormData) }
+                    setShowUserForm(false); setEditingUser(null)
+                    api.get('/api/v1/admin/users').then(d => setUsers(d.users || []))
+                  } catch (err) { alert(err.message) }
+                }}>
+                  <div className="user-edit-modal">
+                    <div className="form-row">
+                      <div className="form-group">
+                        <label className="form-label">Nom</label>
+                        <input type="text" value={userFormData.name} onChange={e => setUserFormData({ ...userFormData, name: e.target.value })} className="form-input" required />
+                      </div>
+                      <div className="form-group">
+                        <label className="form-label">Email</label>
+                        <input type="email" value={userFormData.email} onChange={e => setUserFormData({ ...userFormData, email: e.target.value })} className="form-input" required={!editingUser} />
+                      </div>
+                    </div>
+                    <div className="form-group">
+                      <label className="form-label">Rôle</label>
+                      <select value={userFormData.role} onChange={e => setUserFormData({ ...userFormData, role: e.target.value })} className="form-input">
+                        <option value="USER">Utilisateur</option>
+                        <option value="ADMIN">Administrateur</option>
+                      </select>
+                    </div>
+                    <div style={{ display: 'flex', gap: '0.5rem' }}>
+                      <button type="button" className="btn btn-outline" onClick={() => { setShowUserForm(false); setEditingUser(null) }}>Annuler</button>
+                      <button type="submit" className="btn btn-primary">{editingUser ? 'Mettre à jour' : 'Créer'}</button>
+                    </div>
+                  </div>
+                </form>
+              </div>
+            )}
+            
+            <div className="admin-table-container desktop-only">
+              <table className="admin-table">
+                <thead>
+                  <tr>
+                    <th>Utilisateur</th>
+                    <th>Email</th>
+                    <th>Rôle</th>
+                    <th>Inscription</th>
+                    <th>Actions</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody>
+                  {filteredUsers.map(u => (
+                    <tr key={u.id}>
+                      <td className="td-title">{u.name}</td>
+                      <td style={{ color: 'rgba(255,255,255,0.6)' }}>{u.email}</td>
+                      <td><span className={`role-badge role-${u.role.toLowerCase()}`}>{u.role === 'ADMIN' ? 'Admin' : 'User'}</span></td>
+                      <td style={{ whiteSpace: 'nowrap', fontSize: '0.85rem', color: 'rgba(255,255,255,0.5)' }}>
+                        {u.createdAt ? new Date(u.createdAt).toLocaleDateString('fr-FR') : '-'}
+                      </td>
+                      <td>
+                        <div className="user-table-actions">
+                          <button className="btn-action btn-view" onClick={() => handleViewUserHistory(u)}>Historique</button>
+                          <button className="btn-action btn-edit" onClick={() => { setEditingUser(u); setUserFormData({ name: u.name, email: u.email, role: u.role }); setShowUserForm(true) }}>Modifier</button>
+                          {u.id !== user.id && (
+                            <button className="btn-action btn-delete" onClick={async () => { if (confirm('Êtes-vous sûr de vouloir supprimer cet utilisateur?')) { await api.delete(`/api/v1/admin/users/${u.id}`); setUsers(prev => prev.filter(x => x.id !== u.id)) }}}>Supprimer</button>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <div className="admin-cards mobile-only">
+              {filteredUsers.map(u => (
+                <div key={u.id} className="admin-card">
+                  <div className="admin-card-header">
+                    <div>
+                      <div className="admin-card-title">{u.name}</div>
+                      <div className="admin-card-meta">{u.email}</div>
+                    </div>
+                    <span className={`role-badge role-${u.role.toLowerCase()}`}>{u.role === 'ADMIN' ? 'Admin' : 'User'}</span>
+                  </div>
+                  <div className="admin-card-body">
+                    <div className="admin-card-row">
+                      <span className="admin-card-label">Inscrit le</span>
+                      <span className="admin-card-value">{u.createdAt ? new Date(u.createdAt).toLocaleDateString('fr-FR') : '-'}</span>
+                    </div>
+                  </div>
+                  <div className="admin-card-actions">
+                    <button className="btn btn-outline" onClick={() => handleViewUserHistory(u)}>Historique</button>
+                    <button className="btn btn-primary" onClick={() => { setEditingUser(u); setUserFormData({ name: u.name, email: u.email, role: u.role }); setShowUserForm(true) }}>Modifier</button>
+                  </div>
+                </div>
+              ))}
+            </div>
+            {!filteredUsers.length && <div className="empty-state"><p>Aucun utilisateur trouvé</p></div>}
+            
+            {showUserHistory && userHistory && (
+              <div className="modal-overlay" onClick={() => setShowUserHistory(false)}>
+                <div className="modal-content user-history-modal" onClick={e => e.stopPropagation()}>
+                  <button className="modal-close" onClick={() => setShowUserHistory(false)}>×</button>
+                  <div className="user-history-header">
+                    <div className="user-avatar" style={{ width: 60, height: 60, fontSize: '1.5rem' }}>
+                      {userHistory.user.name.charAt(0).toUpperCase()}
+                    </div>
+                    <div>
+                      <h3>{userHistory.user.name}</h3>
+                      <p style={{ color: 'rgba(255,255,255,0.5)', fontSize: '0.9rem' }}>{userHistory.user.email}</p>
+                    </div>
+                  </div>
+                  
+                  <div className="user-history-stats">
+                    <div className="history-stat">
+                      <span className="history-stat-value">{userHistory.orders.length}</span>
+                      <span className="history-stat-label">Commandes</span>
+                    </div>
+                    <div className="history-stat">
+                      <span className="history-stat-value">{userHistory.tickets.length}</span>
+                      <span className="history-stat-label">Billets</span>
+                    </div>
+                    <div className="history-stat">
+                      <span className="history-stat-value">{userHistory.orders.reduce((a, o) => a + o.totalPrice, 0).toFixed(2)}€</span>
+                      <span className="history-stat-label">Total dépensé</span>
+                    </div>
+                  </div>
+                  
+                  <div className="user-history-section">
+                    <h4>Historique des commandes</h4>
+                    {userHistory.orders.length === 0 ? (
+                      <p style={{ color: 'rgba(255,255,255,0.5)', padding: '1rem 0' }}>Aucune commande</p>
+                    ) : (
+                      <div className="history-list">
+                        {userHistory.orders.map(order => (
+                          <div key={order.id} className="history-item">
+                            <div className="history-item-info">
+                              <span className="history-item-title">{order.event?.title}</span>
+                              <span className="history-item-meta">{new Date(order.createdAt).toLocaleDateString('fr-FR')} · {order.quantity} billet{order.quantity > 1 ? 's' : ''}</span>
+                            </div>
+                            <span className={`status-badge status-${order.status.toLowerCase()}`}>{order.status === 'PAID' ? 'Payé' : order.status}</span>
+                            <span className="history-item-price">{order.totalPrice.toFixed(2)}€</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                  
+                  <div className="user-history-section">
+                    <h4>Billets disponibles</h4>
+                    {userHistory.tickets.length === 0 ? (
+                      <p style={{ color: 'rgba(255,255,255,0.5)', padding: '1rem 0' }}>Aucun billet</p>
+                    ) : (
+                      <div className="history-list">
+                        {userHistory.tickets.map(ticket => (
+                          <div key={ticket.id} className="history-item">
+                            <div className="history-item-info">
+                              <span className="history-item-title">{ticket.event?.title}</span>
+                              <span className="history-item-meta">{new Date(ticket.event?.date).toLocaleDateString('fr-FR')}</span>
+                            </div>
+                            <span className={`ticket-status ${ticket.scanned ? 'used' : 'valid'}`}>{ticket.scanned ? 'Utilisé' : 'Valide'}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
+          </>
         )}
 
         {activeTab === 'analytics' && <Analytics />}
