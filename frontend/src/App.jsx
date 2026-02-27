@@ -2,11 +2,13 @@ import { BrowserRouter, Routes, Route, Link, Navigate, useNavigate, useParams } 
 import { useState, useEffect, createContext, useContext, useCallback, useRef } from 'react'
 import { loadStripe } from '@stripe/stripe-js'
 import { Elements, CardElement, useStripe, useElements } from '@stripe/react-stripe-js'
+import './background.js'
 import {
   LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer, Area, AreaChart, Legend
 } from 'recharts'
 import { CalendarView } from './CalendarView.jsx'
+import { AdminDashboard } from './AdminDashboard.jsx'
 
 const API_URL = ''
 
@@ -141,6 +143,7 @@ function Navbar() {
 
         <div className={`nav-links ${open ? 'active' : ''}`}>
           <Link to="/events" className="nav-link" onClick={() => setOpen(false)}>Événements</Link>
+          <Link to="/marketplace" className="nav-link" onClick={() => setOpen(false)}>Revente</Link>
           <Link to="/calendar" className="nav-link" onClick={() => setOpen(false)}>Calendrier</Link>
           <Link to="/recommendations" className="nav-link" onClick={() => setOpen(false)}>Pour vous</Link>
           {user ? (
@@ -168,43 +171,363 @@ function Navbar() {
   )
 }
 
+function ParticleBackground() {
+  useEffect(() => {
+    if (window.PsychedelicBackground) {
+      new window.PsychedelicBackground('bg-canvas');
+    }
+    if (window.CursorEffect) {
+      new window.CursorEffect();
+    }
+    if (window.playOpeningAnimation) {
+      window.playOpeningAnimation();
+    }
+  }, []);
+  
+  return (
+    <>
+      <canvas id="bg-canvas" className="particle-canvas" />
+      <div className="grain-overlay" />
+    </>
+  )
+}
+
+function OpeningAnimation() {
+  useEffect(() => {
+    if (window.playOpeningAnimation) {
+      window.playOpeningAnimation();
+    }
+  }, []);
+  return null
+}
+
 function Hero() {
   const navigate = useNavigate()
   const [search, setSearch] = useState('')
-  const handleSearch = (e) => { e.preventDefault(); navigate(`/?search=${search}`) }
+  const [suggestions, setSuggestions] = useState([])
+  const [showSuggestions, setShowSuggestions] = useState(false)
+  const [hookText, setHookText] = useState('')
+  const fullHook = "Ce soir, où tu vas ?"
+  const [events, setEvents] = useState([])
+  const categories = [
+    { key: 'CONCERT', label: 'Concert', icon: '🎵' },
+    { key: 'FESTIVAL', label: 'Festival', icon: '🎪' },
+    { key: 'SPORT', label: 'Sport', icon: '⚽' },
+    { key: 'THEATRE', label: 'Théâtre', icon: '🎭' },
+    { key: 'HUMOUR', label: 'Humour', icon: '😂' },
+    { key: 'CONFERENCE', label: 'Conf.', icon: '🎤' }
+  ]
+
+  useEffect(() => {
+    api.get('/api/v1/events?limit=10').then(d => setEvents(d.events || [])).catch(console.error)
+  }, [])
+
+  useEffect(() => {
+    let i = 0
+    const interval = setInterval(() => {
+      if (i <= fullHook.length) {
+        setHookText(fullHook.slice(0, i))
+        i++
+      } else {
+        clearInterval(interval)
+      }
+    }, 80)
+    return () => clearInterval(interval)
+  }, [])
+
+  useEffect(() => {
+    if (search.length >= 2) {
+      const q = search.toLowerCase()
+      const filtered = events.filter(e => 
+        e.title.toLowerCase().includes(q) || 
+        e.location.toLowerCase().includes(q)
+      ).slice(0, 5)
+      setSuggestions(filtered)
+      setShowSuggestions(true)
+    } else {
+      setSuggestions([])
+      setShowSuggestions(false)
+    }
+  }, [search, events])
+
+  const handleSearch = (e) => {
+    e.preventDefault()
+    if (search.trim()) navigate(`/?search=${search}`)
+    setShowSuggestions(false)
+  }
+
+  const bgCategory = events[0]?.category || 'CONCERT'
 
   return (
     <section className="hero-section">
-      <div className="hero-bg">
-        <div className="hero-gradient" />
-        <div className="hero-pattern" />
-      </div>
-      <div className="container hero-content">
-        <h1 className="hero-title">
-          <span className="hero-title-line">VIBREZ</span>
-          <span className="hero-title-line accent">DIFFÉREMMENT</span>
+      <ParticleBackground />
+      <OpeningAnimation />
+      
+      <div className="hero-bg-text">{bgCategory}</div>
+      
+      <div className="hero-content">
+        <h1 className="hero-hook">
+          {hookText}
+          <span className="cursor-blink"></span>
         </h1>
-        <p className="hero-subtitle">Des expériences uniques. Des moments inoubliables.</p>
+        
         <form onSubmit={handleSearch} className="hero-search">
-          <input type="text" value={search} onChange={(e) => setSearch(e.target.value)}
-            placeholder="Artiste, ville, genre..." className="hero-search-input" aria-label="Rechercher un événement" />
-          <button type="submit" className="btn btn-primary">Rechercher</button>
+          <input 
+            type="text" 
+            value={search} 
+            onChange={(e) => setSearch(e.target.value)}
+            onFocus={() => search.length >= 2 && setShowSuggestions(true)}
+            onBlur={() => setTimeout(() => setShowSuggestions(false), 200)}
+            placeholder="Recherche un artiste, lieu, événement..." 
+            className="hero-search-input" 
+          />
+          <button type="submit" className="hero-search-btn">Rechercher</button>
+          
+          {showSuggestions && suggestions.length > 0 && (
+            <div className="search-suggestions">
+              {suggestions.map(s => (
+                <div 
+                  key={s.id} 
+                  className="suggestion-item" 
+                  onClick={() => { navigate(`/event/${s.id}`); setShowSuggestions(false); setSearch(''); }}
+                >
+                  <span className="suggestion-title">{s.title}</span>
+                  <span className="suggestion-meta">{new Date(s.date).toLocaleDateString('fr-FR')} • {s.location}</span>
+                </div>
+              ))}
+            </div>
+          )}
         </form>
-        <div className="hero-categories">
-          {['concert','festival','humour','sport','theatre'].map(c => (
-            <Link key={c} to={`/?category=${c}`} className="category-pill">
-              {c.charAt(0).toUpperCase() + c.slice(1)}
+
+        <div className="categories-row">
+          {categories.map(c => (
+            <Link key={c.key} to={`/?category=${c.key}`} className="category-pill">
+              <span>{c.icon}</span>
+              <span>{c.label}</span>
             </Link>
           ))}
         </div>
       </div>
+
+      <div className="scroll-indicator">
+        <span className="chevron">↓</span>
+        Explorer
+      </div>
     </section>
+  )
+}
+
+function Skyline() {
+  return (
+    <section className="skyline-section">
+      <svg className="skyline-layer skyline-layer-1 skyline-svg" viewBox="0 0 1200 200" preserveAspectRatio="none">
+        <path fill="rgba(255,255,255,0.1)" d="M0,200 L0,150 L50,150 L50,120 L100,120 L100,160 L150,160 L150,100 L200,100 L200,140 L250,140 L250,80 L300,80 L300,130 L350,130 L350,90 L400,90 L400,150 L450,150 L450,110 L500,110 L500,160 L550,160 L550,70 L600,70 L600,140 L650,140 L650,100 L700,100 L700,150 L750,150 L750,80 L800,80 L800,130 L850,130 L850,60 L900,60 L900,120 L950,120 L950,90 L1000,90 L1000,140 L1050,140 L1050,110 L1100,110 L1100,160 L1150,160 L1150,130 L1200,130 L1200,200 Z" />
+      </svg>
+      <svg className="skyline-layer skyline-layer-2 skyline-svg" viewBox="0 0 1200 200" preserveAspectRatio="none">
+        <path fill="rgba(255,255,255,0.15)" d="M0,200 L0,160 L40,160 L40,140 L80,140 L80,120 L120,120 L120,150 L160,150 L160,100 L200,100 L200,130 L240,130 L240,90 L280,90 L280,140 L320,140 L320,80 L360,80 L360,130 L400,130 L400,110 L440,110 L440,150 L480,150 L480,70 L520,70 L520,120 L560,120 L560,140 L600,140 L600,100 L640,100 L640,150 L680,150 L680,60 L720,60 L720,130 L760,130 L760,90 L800,90 L800,140 L840,140 L840,110 L880,110 L880,150 L920,150 L920,80 L960,80 L960,130 L1000,130 L1000,100 L1040,100 L1040,150 L1080,150 L1080,120 L1120,120 L1120,160 L1160,160 L1160,140 L1200,140 L1200,200 Z" />
+      </svg>
+      <svg className="skyline-layer skyline-layer-3 skyline-svg" viewBox="0 0 1200 200" preserveAspectRatio="none">
+        <path fill="rgba(255,0,255,0.2)" className="neon-sign" d="M0,200 L0,170 L30,170 L30,150 L60,150 L60,170 L90,170 L90,130 L120,130 L120,170 L150,170 L150,160 L180,160 L180,140 L210,140 L210,170 L240,170 L240,120 L270,120 L270,170 L300,170 L300,155 L330,155 L330,135 L360,135 L360,170 L390,170 L390,145 L420,145 L420,170 L450,170 L450,125 L480,125 L480,170 L510,170 L510,150 L540,150 L540,170 L570,170 L570,140 L600,140 L600,170 L630,170 L630,160 L660,160 L660,130 L690,130 L690,170 L720,170 L720,115 L750,115 L750,170 L780,170 L780,145 L810,145 L810,170 L840,170 L840,135 L870,135 L870,170 L900,170 L900,155 L930,155 L930,170 L960,170 L960,140 L990,140 L990,170 L1020,170 L1020,160 L1050,160 L1050,170 L1080,170 L1080,130 L1110,130 L1110,170 L1140,170 L1140,150 L1170,150 L1170,170 L1200,170 L1200,200 Z" />
+        <rect x="50" y="155" width="3" height="10" fill="rgba(255,255,200,0.8)" className="window-light" style={{animationDelay: '0.2s'}} />
+        <rect x="130" y="145" width="3" height="8" fill="rgba(255,255,200,0.6)" className="window-light" style={{animationDelay: '0.5s'}} />
+        <rect x="280" y="135" width="3" height="10" fill="rgba(255,255,200,0.7)" className="window-light" style={{animationDelay: '1s'}} />
+        <rect x="370" y="145" width="3" height="8" fill="rgba(255,255,200,0.5)" className="window-light" style={{animationDelay: '0.8s'}} />
+        <rect x="520" y="125" width="3" height="10" fill="rgba(255,255,200,0.8)" className="window-light" style={{animationDelay: '1.2s'}} />
+        <rect x="690" y="135" width="3" height="8" fill="rgba(255,255,200,0.6)" className="window-light" style={{animationDelay: '0.3s'}} />
+        <rect x="850" y="145" width="3" height="10" fill="rgba(255,255,200,0.7)" className="window-light" style={{animationDelay: '0.7s'}} />
+        <rect x="1000" y="155" width="3" height="8" fill="rgba(255,255,200,0.5)" className="window-light" style={{animationDelay: '1.5s'}} />
+      </svg>
+    </section>
+  )
+}
+
+function PosterCard({ event, onClick }) {
+  const cardRef = useRef(null)
+  const [mousePos, setMousePos] = useState({ x: 50, y: 50 })
+
+  const handleMouseMove = (e) => {
+    if (cardRef.current) {
+      const rect = cardRef.current.getBoundingClientRect()
+      const x = ((e.clientX - rect.left) / rect.width) * 100
+      const y = ((e.clientY - rect.top) / rect.height) * 100
+      setMousePos({ x, y })
+    }
+  }
+
+  const handleClick = () => {
+    if (cardRef.current) {
+      cardRef.current.classList.add('clicking')
+      setTimeout(() => onClick(), 400)
+    }
+  }
+
+  const getEventImage = () => {
+    if (event.imageUrl) return event.imageUrl
+    const images = {
+      CONCERT: 'https://images.unsplash.com/photo-1470229722913-7c0e2dbbafd3?w=400',
+      FESTIVAL: 'https://images.unsplash.com/photo-1533174072545-7a4b6ad7a6c3?w=400',
+      SPORT: 'https://images.unsplash.com/photo-1461896836934-ffe607ba8211?w=400',
+      THEATRE: 'https://images.unsplash.com/photo-1503095396549-807759245b35?w=400',
+      CONFERENCE: 'https://images.unsplash.com/photo-1540575467063-178a50c2df87?w=400',
+      HUMOUR: 'https://images.unsplash.com/photo-1527224538127-2104bb71c51b?w=400'
+    }
+    return images[event.category] || 'https://images.unsplash.com/photo-1492684223066-81342ee5ff30?w=400'
+  }
+
+  return (
+    <div 
+      ref={cardRef}
+      className="poster-card"
+      onClick={handleClick}
+      onMouseMove={handleMouseMove}
+      style={{ '--mouse-x': mousePos.x + '%', '--mouse-y': mousePos.y + '%' }}
+    >
+      <img src={getEventImage()} alt={event.title} className="poster-image" loading="lazy" />
+      <div className="poster-overlay">
+        <h3 className="poster-title">{event.title}</h3>
+        <p className="poster-meta">
+          {new Date(event.date).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })} • {event.location}
+        </p>
+        <span className="poster-price">{event.price.toFixed(2)}€</span>
+      </div>
+      <button className="poster-cta">Voir</button>
+    </div>
+  )
+}
+
+function TonightPanel({ events }) {
+  const navigate = useNavigate()
+  const tonightEvents = events.filter(e => {
+    const eventDate = new Date(e.date)
+    const today = new Date()
+    const diffDays = Math.ceil((eventDate - today) / (1000 * 60 * 60 * 24))
+    return diffDays <= 7 && diffDays >= 0
+  }).slice(0, 8)
+
+  return (
+    <div className="panel panel-tonight">
+      <h2 className="panel-title chromatic">Ce soir</h2>
+      <div className="posters-horizontal">
+        {tonightEvents.map(event => (
+          <PosterCard key={event.id} event={event} onClick={() => navigate(`/event/${event.id}`)} />
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function TrendingPanel({ events }) {
+  const navigate = useNavigate()
+  const trendingEvents = [...events].sort((a, b) => b.price - a.price).slice(0, 6)
+  const [viewers] = useState(Math.floor(Math.random() * 50) + 10)
+
+  return (
+    <div className="panel panel-trending">
+      <h2 className="panel-title">Tendances</h2>
+      <div className="live-count">
+        <span className="live-dot"></span>
+        <span>{viewers} personnes regardent en ce moment</span>
+      </div>
+      <div className="posters-horizontal">
+        {trendingEvents.map(event => (
+          <div key={event.id} style={{ position: 'relative' }}>
+            <PosterCard event={event} onClick={() => navigate(`/event/${event.id}`)} />
+            <div className="popularity-bar">
+              <div className="popularity-bar-fill" style={{ width: (event.price / 300 * 100) + '%' }}></div>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function ForYouPanel({ events, user }) {
+  const navigate = useNavigate()
+  const recommended = events.slice(0, 6)
+
+  return (
+    <div className="panel panel-foryou">
+      <h2 className="panel-title">{user ? 'Pour vous' : 'À découvrir'}</h2>
+      <div className="posters-horizontal">
+        {user && (
+          <div className="mystery-card">
+            <div className="mystery-front">
+              <span style={{ fontSize: '3rem' }}>🎁</span>
+            </div>
+            <div className="mystery-back">
+              <p style={{ textAlign: 'center', color: 'white' }}>Connectez-vous pour des recommandations personnalisées</p>
+            </div>
+          </div>
+        )}
+        {recommended.map(event => (
+          <PosterCard key={event.id} event={event} onClick={() => navigate(`/event/${event.id}`)} />
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function WidgetsRibbon({ events }) {
+  const upcoming = events?.find(e => new Date(e.date) > new Date())
+  const trending = events?.slice(0, 2)
+  const widgets = [
+    { icon: '⏱️', text: upcoming ? `${upcoming.title} - ${new Date(upcoming.date).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })}` : 'Aucun événement à venir' },
+    { icon: '🔥', text: trending?.[0] ? `${trending[0].title} - ${trending[0].price.toFixed(2)}€` : 'Tendances' },
+    { icon: '👥', text: '3 nouveaux amis cette semaine' },
+    { icon: '🌧️', text: 'Paris - 12°C' },
+    { icon: '🎵', text: '50+ événements ce week-end' },
+    { icon: '⭐', text: 'Nouveau : Festival d\'été' }
+  ]
+
+  const duplicatedWidgets = [...widgets, ...widgets]
+
+  return (
+    <div className="widgets-ribbon">
+      <div className="widgets-track">
+        {duplicatedWidgets.map((w, i) => (
+          <div key={i} className="widget-item">
+            <span>{w.icon}</span>
+            <span>{w.text}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function Home() {
+  const [events, setEvents] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [params] = useState(() => new URLSearchParams(window.location.search))
+  const { user } = useAuth() || {}
+
+  useEffect(() => {
+    const qp = new URLSearchParams()
+    const s = params.get('search'); const c = params.get('category')
+    if (s) qp.set('search', s); if (c) qp.set('category', c)
+    api.get(`/api/v1/events${qp.toString() ? '?' + qp : ''}`)
+      .then(d => setEvents(d.events || [])).catch(console.error).finally(() => setLoading(false))
+  }, [])
+
+  return (
+    <div className="home-page">
+      <Hero />
+      <Skyline />
+      <TonightPanel events={events} />
+      <TrendingPanel events={events} />
+      <ForYouPanel events={events} user={user} />
+      <WidgetsRibbon events={events} />
+    </div>
   )
 }
 
 function FeaturedEvents({ events }) {
   const navigate = useNavigate()
   if (!events?.length) return null
+  
+  const carouselEvents = [...events, ...events]
+  
   return (
     <section className="featured-section">
       <div className="container">
@@ -212,27 +535,31 @@ function FeaturedEvents({ events }) {
           <h2 className="section-title">À la une</h2>
           <Link to="/events" className="section-link">Voir tout →</Link>
         </div>
-        <div className="featured-grid">
-          {events.slice(0, 3).map((event, i) => (
-            <div key={event.id} className={`featured-card featured-card-${i + 1}`} onClick={() => navigate(`/event/${event.id}`)}>
-              <div className="featured-card-bg">
-                {event.videoUrl && (isYouTubeUrl(event.videoUrl)
-                  ? <iframe src={getYouTubeEmbedUrl(event.videoUrl)} frameBorder="0" allowFullScreen className="featured-card-video" title={event.title} loading="lazy" />
-                  : <div className="featured-card-image" style={{ backgroundImage: `url(${event.imageUrl || ''})` }} />
-                )}
-                <div className="featured-card-overlay" />
-              </div>
-              <div className="featured-card-content">
-                <span className="featured-badge">À la une</span>
-                <h3 className="featured-title">{event.title}</h3>
-                <p className="featured-meta">{new Date(event.date).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long' })} • {event.location}</p>
-                <div className="featured-footer">
-                  <span className="featured-price">{event.price.toFixed(2)}€</span>
-                  <span className="btn btn-sm">Voir</span>
+        <div className="featured-carousel">
+          <div className="featured-carousel-track">
+            {carouselEvents.map((event, i) => (
+              <div key={`${event.id}-${i}`} className="featured-carousel-item" onClick={() => navigate(`/event/${event.id}`)}>
+                <div className="featured-carousel-card">
+                  {event.imageUrl || event.videoUrl ? (
+                    <div className="featured-carousel-image" style={{ backgroundImage: `url(${event.imageUrl || (event.videoUrl ? getYouTubeThumbnailUrl(event.videoUrl) : '')})` }} />
+                  ) : (
+                    <div className="featured-carousel-placeholder">✦</div>
+                  )}
+                  <div className="featured-carousel-content">
+                    <span className="featured-carousel-badge">À la une</span>
+                    <h3 className="featured-carousel-title">{event.title}</h3>
+                    <p className="featured-carousel-meta">
+                      {new Date(event.date).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long' })} • {event.location}
+                    </p>
+                    <div className="featured-carousel-footer">
+                      <span className="featured-carousel-price">{event.price.toFixed(2)}€</span>
+                      <span className="btn btn-sm">Voir</span>
+                    </div>
+                  </div>
                 </div>
               </div>
-            </div>
-          ))}
+            ))}
+          </div>
         </div>
       </div>
     </section>
@@ -308,67 +635,28 @@ function EventGrid({ events, loading, title, emptyMessage }) {
   )
 }
 
-function Home() {
-  const [events, setEvents] = useState([])
-  const [loading, setLoading] = useState(true)
-  const [params] = useState(() => new URLSearchParams(window.location.search))
-
-  useEffect(() => {
-    const qp = new URLSearchParams()
-    const s = params.get('search'); const c = params.get('category')
-    if (s) qp.set('search', s); if (c) qp.set('category', c)
-    api.get(`/api/v1/events${qp.toString() ? '?' + qp : ''}`)
-      .then(d => setEvents(d.events || [])).catch(console.error).finally(() => setLoading(false))
-  }, [])
-
-  useEffect(() => {
-    const schema = {
-      "@context": "https://schema.org",
-      "@type": "Organization",
-      "name": "TRIP",
-      "url": "https://trip.example.com",
-      "logo": "https://trip.example.com/logo.png",
-      "contactPoint": {
-        "@type": "ContactPoint",
-        "telephone": "+33-1-23-45-67-89",
-        "contactType": "customer service",
-        "availableLanguage": ["French", "English"]
-      },
-      "sameAs": []
-    }
-    const script = document.createElement('script')
-    script.type = 'application/ld+json'
-    script.text = JSON.stringify(schema)
-    document.head.appendChild(script)
-    return () => { if (document.head.contains(script)) document.head.removeChild(script) }
-  }, [])
-
-  const search = params.get('search'); const category = params.get('category')
-  const gridTitle = search || category
-    ? `Résultats${search ? ` pour "${search}"` : ''}${category ? ` — ${category}` : ''}`
-    : 'Tous les événements'
-
-  return (
-    <div className="home-page">
-      <Hero />
-      <FeaturedEvents events={events} />
-      <EventGrid events={events} loading={loading} title={gridTitle} />
-    </div>
-  )
-}
-
 function Events() {
   const [events, setEvents] = useState([])
   const [loading, setLoading] = useState(true)
   const [filter, setFilter] = useState({ search: '', date: '', price: '', category: '' })
+  const [pagination, setPagination] = useState({ page: 1, total: 0, limit: 12 })
 
   useEffect(() => {
     setLoading(true)
     const p = new URLSearchParams()
     Object.entries(filter).forEach(([k, v]) => { if (v) p.set(k, v) })
-    api.get(`/api/v1/events${p.toString() ? '?' + p : ''}`)
-      .then(d => setEvents(d.events || [])).catch(console.error).finally(() => setLoading(false))
-  }, [filter])
+    p.set('page', pagination.page)
+    p.set('limit', pagination.limit)
+    api.get(`/api/v1/events?${p.toString()}`)
+      .then(d => { 
+        setEvents(d.events || [])
+        setPagination(prev => ({ ...prev, total: d.pagination?.total || d.total || 0 }))
+      })
+      .catch(console.error)
+      .finally(() => setLoading(false))
+  }, [filter, pagination.page])
+
+  const totalPages = Math.ceil(pagination.total / pagination.limit)
 
   return (
     <div className="page events-page">
@@ -377,24 +665,33 @@ function Events() {
         <div className="filters-bar">
           <input type="text" placeholder="Rechercher..." className="filter-input" value={filter.search}
             aria-label="Filtrer les événements"
-            onChange={e => setFilter({ ...filter, search: e.target.value })} />
-          <select className="filter-select" value={filter.category} onChange={e => setFilter({ ...filter, category: e.target.value })} aria-label="Filtrer par catégorie">
+            onChange={e => { setFilter({ ...filter, search: e.target.value }); setPagination(p => ({ ...p, page: 1 })) }} />
+          <select className="filter-select" value={filter.category} onChange={e => { setFilter({ ...filter, category: e.target.value }); setPagination(p => ({ ...p, page: 1 })) }} aria-label="Filtrer par catégorie">
             <option value="">Toutes catégories</option>
             {Object.entries(CAT_LABELS).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
           </select>
-          <select className="filter-select" value={filter.date} onChange={e => setFilter({ ...filter, date: e.target.value })}>
+          <select className="filter-select" value={filter.date} onChange={e => { setFilter({ ...filter, date: e.target.value }); setPagination(p => ({ ...p, page: 1 })) }}>
             <option value="">Toutes dates</option>
             <option value="today">Aujourd'hui</option>
             <option value="week">Cette semaine</option>
             <option value="month">Ce mois</option>
           </select>
-          <select className="filter-select" value={filter.price} onChange={e => setFilter({ ...filter, price: e.target.value })}>
+          <select className="filter-select" value={filter.price} onChange={e => { setFilter({ ...filter, price: e.target.value }); setPagination(p => ({ ...p, page: 1 })) }}>
             <option value="">Tous prix</option>
             <option value="asc">Prix croissant</option>
             <option value="desc">Prix décroissant</option>
           </select>
         </div>
         <EventGrid events={events} loading={loading} title="" />
+        {totalPages > 1 && (
+          <div className="pagination">
+            <button className="pagination-btn" onClick={() => setPagination(p => ({ ...p, page: p.page - 1 }))} disabled={pagination.page === 1}>‹</button>
+            {Array.from({ length: totalPages }, (_, i) => i + 1).map(page => (
+              <button key={page} className={`pagination-btn ${pagination.page === page ? 'active' : ''}`} onClick={() => setPagination(p => ({ ...p, page }))}>{page}</button>
+            ))}
+            <button className="pagination-btn" onClick={() => setPagination(p => ({ ...p, page: p.page + 1 }))} disabled={pagination.page === totalPages}>›</button>
+          </div>
+        )}
       </div>
     </div>
   )
@@ -603,6 +900,20 @@ function EventDetail() {
                   </>
                 )}
                 <p className="secure-notice">🔒 Paiement 100% sécurisé</p>
+                <div className="trust-badges">
+                  <div className="trust-badge">
+                    <span className="trust-icon">🛡️</span>
+                    <span>Garantie billet valide</span>
+                  </div>
+                  <div className="trust-badge">
+                    <span className="trust-icon">↩️</span>
+                    <span>Remboursement si invalide</span>
+                  </div>
+                </div>
+                <p className="resale-notice">
+                  ℹ️ Ce billet est issu de la revente entre particuliers. 
+                  Tous nos billets sont vérifiés et garantis valides.
+                </p>
               </>
             )}
           </div>
@@ -856,6 +1167,18 @@ function Tickets() {
             </p>
             <p style={{ color: 'rgba(255,255,255,0.5)', fontSize: '0.9rem', marginTop: '0.25rem' }}>{selectedTicket.event.location}</p>
             <img src={selectedTicket.qrCode} alt="QR Code" className="qr-code-lg" loading="lazy" decoding="async" />
+            <div style={{ display: 'flex', gap: '0.5rem', marginTop: '1rem' }}>
+              <button 
+                className="btn btn-primary" 
+                style={{ flex: 1 }}
+                onClick={(e) => { 
+                  e.stopPropagation(); 
+                  window.open(`/api/v1/tickets/${selectedTicket.id}/pdf`, '_blank') 
+                }}
+              >
+                📥 Télécharger PDF
+              </button>
+            </div>
             {isTransferable(selectedTicket) && (
               <button className="btn btn-outline" style={{ marginTop: '1.5rem', width: '100%' }}
                 onClick={(e) => { e.stopPropagation(); setShowTransfer(true) }}>
@@ -1678,17 +2001,55 @@ function Profile() {
   const { user, login: updateUserContext } = useAuth()
   const [profile, setProfile] = useState(null)
   const [loading, setLoading] = useState(true)
+  const [activeTab, setActiveTab] = useState('profile')
   const [saving, setSaving] = useState(false)
   const [message, setMessage] = useState(null)
-  const [formData, setFormData] = useState({ name: '', bio: '' })
+  const [formData, setFormData] = useState({ name: '', bio: '', avatarUrl: '' })
   const [passwordData, setPasswordData] = useState({ currentPassword: '', newPassword: '' })
-  const [showPassword, setShowPassword] = useState(false)
+  const [friends, setFriends] = useState([])
+  const [friendRequests, setFriendRequests] = useState([])
+  const [searchQuery, setSearchQuery] = useState('')
+  const [searchResults, setSearchResults] = useState([])
+  const [posts, setPosts] = useState([])
+  const [newPost, setNewPost] = useState('')
+  const [posting, setPosting] = useState(false)
+  
+  const [myTickets, setMyTickets] = useState([])
+  const [myListings, setMyListings] = useState([])
+  const [showListModal, setShowListModal] = useState(null)
+  const [listPrice, setListPrice] = useState('')
+  const [listDescription, setListDescription] = useState('')
+  const [listingLoading, setListingLoading] = useState(false)
+  const navigate = useNavigate()
+
+  const badges = [
+    { id: 'first_ticket', name: 'Premier billet', icon: '🎫', desc: 'Acheté votre premier billet', condition: myTickets.length >= 1 },
+    { id: 'event_veteran', name: 'Veteran', icon: '🎟️', desc: 'Assisté à 5 événements', condition: myTickets.filter(t => new Date(t.event.date) < new Date()).length >= 5 },
+    { id: 'social_butterfly', name: 'Papillon social', icon: '🦋', desc: '10 amis', condition: friends.length >= 10 },
+    { id: 'seller', name: 'Vendeur', icon: '💰', desc: 'Mis un billet en vente', condition: myListings.length >= 1 },
+    { id: 'platinum', name: 'VIP', icon: '⭐', desc: 'Membre depuis plus de 6 mois', condition: profile?.createdAt && new Date() - new Date(profile.createdAt) > 180 * 24 * 60 * 60 * 1000 },
+    { id: 'trendsetter', name: 'Tendances', icon: '🔥', desc: 'Post le plus liké', condition: posts.length >= 3 },
+  ]
+
+  const earnedBadges = badges.filter(b => b.condition)
 
   useEffect(() => {
-    api.get('/api/v1/profile/profile')
-      .then(p => { setProfile(p); setFormData({ name: p.name || '', bio: p.bio || '' }) })
-      .catch(console.error)
-      .finally(() => setLoading(false))
+    Promise.all([
+      api.get('/api/v1/profile/profile'),
+      api.get('/api/v1/friends'),
+      api.get('/api/v1/friends/requests'),
+      api.get('/api/v1/friends/feed'),
+      api.get('/api/v1/tickets'),
+      api.get('/api/v1/tickets/listings/my')
+    ]).then(([p, f, req, feed, tickets, listings]) => {
+      setProfile(p)
+      setFriends(f)
+      setFriendRequests(req)
+      setPosts(feed || [])
+      setMyTickets(tickets || [])
+      setMyListings(listings || [])
+      setFormData({ name: p.name || '', bio: p.bio || '', avatarUrl: p.avatarUrl || '' })
+    }).catch(console.error).finally(() => setLoading(false))
   }, [])
 
   const handleSaveProfile = async (e) => {
@@ -1712,82 +2073,607 @@ function Profile() {
     finally { setSaving(false) }
   }
 
-  const handleShare = (eventData) => {
-    const text = `Regarde cet événement : ${eventData.title} - ${new Date(eventData.date).toLocaleDateString('fr-FR')}`
-    const url = window.location.origin + `/event/${eventData.id}`
-    if (navigator.share) {
-      navigator.share({ title: eventData.title, text, url })
-    } else {
-      navigator.clipboard.writeText(`${text} ${url}`)
-      setMessage({ type: 'success', text: 'Lien copié !' })
+  const handleSearchFriends = async (query) => {
+    setSearchQuery(query)
+    if (query.length < 2) { setSearchResults([]); return }
+    try {
+      const results = await api.get(`/api/v1/friends/search?q=${encodeURIComponent(query)}`)
+      setSearchResults(results)
+    } catch (err) { console.error(err) }
+  }
+
+  const handleSendRequest = async (userId) => {
+    try {
+      await api.post(`/api/v1/friends/request/${userId}`)
+      setSearchResults(prev => prev.map(u => u.id === userId ? { ...u, requestSent: true } : u))
+      setMessage({ type: 'success', text: 'Demande d\'ami envoyée !' })
+    } catch (err) { setMessage({ type: 'error', text: err.message }) }
+  }
+
+  const handleAcceptRequest = async (requestId) => {
+    try {
+      await api.put(`/api/v1/friends/request/${requestId}/accept`)
+      const updated = await api.get('/api/v1/friends')
+      const requests = await api.get('/api/v1/friends/requests')
+      setFriends(updated)
+      setFriendRequests(requests)
+      setMessage({ type: 'success', text: 'Ami ajouté !' })
+    } catch (err) { setMessage({ type: 'error', text: err.message }) }
+  }
+
+  const handleRejectRequest = async (requestId) => {
+    try {
+      await api.put(`/api/v1/friends/request/${requestId}/reject`)
+      const requests = await api.get('/api/v1/friends/requests')
+      setFriendRequests(requests)
+    } catch (err) { setMessage({ type: 'error', text: err.message }) }
+  }
+
+  const handleRemoveFriend = async (friendId) => {
+    try {
+      await api.delete(`/api/v1/friends/${friendId}`)
+      setFriends(prev => prev.filter(f => f.id !== friendId))
+      setMessage({ type: 'success', text: 'Ami supprimé' })
+    } catch (err) { setMessage({ type: 'error', text: err.message }) }
+  }
+
+  const handleCreatePost = async (e) => {
+    e.preventDefault()
+    if (!newPost.trim()) return
+    setPosting(true)
+    try {
+      const post = await api.post('/api/v1/friends/posts', { content: newPost })
+      setPosts([post, ...posts])
+      setNewPost('')
+    } catch (err) { setMessage({ type: 'error', text: err.message }) }
+    finally { setPosting(false) }
+  }
+
+  const handleDeletePost = async (postId) => {
+    try {
+      await api.delete(`/api/v1/friends/posts/${postId}`)
+      setPosts(posts.filter(p => p.id !== postId))
+    } catch (err) { setMessage({ type: 'error', text: err.message }) }
+  }
+
+  const handleCreateListing = async (ticketId) => {
+    setListingLoading(true)
+    try {
+      const listing = await api.post(`/api/v1/tickets/${ticketId}/list`, {
+        price: parseFloat(listPrice),
+        description: listDescription || null
+      })
+      setMyListings([listing, ...myListings])
+      setShowListModal(null)
+      setListPrice('')
+      setListDescription('')
+      setMessage({ type: 'success', text: 'Billet mis en vente !' })
+    } catch (err) {
+      setMessage({ type: 'error', text: err.message })
+    } finally {
+      setListingLoading(false)
     }
   }
+
+  const handleCancelListing = async (listingId) => {
+    try {
+      await api.delete(`/api/v1/tickets/listings/${listingId}`)
+      setMyListings(myListings.filter(l => l.id !== listingId))
+      setMessage({ type: 'success', text: 'Annonce supprimée' })
+    } catch (err) { setMessage({ type: 'error', text: err.message }) }
+  }
+
+  const groupedMyTickets = myTickets.reduce((acc, ticket) => {
+    const eventId = ticket.event.id
+    if (!acc[eventId]) {
+      acc[eventId] = { event: ticket.event, tickets: [], isPast: new Date(ticket.event.date) < new Date() }
+    }
+    acc[eventId].tickets.push(ticket)
+    return acc
+  }, {})
 
   if (loading) return <div className="loading"><div className="spinner" /></div>
 
   return (
-    <div className="page">
+    <div className="page profile-page">
+      <div className="profile-header">
+        <div className="profile-cover" />
+        <div className="container">
+          <div className="profile-info">
+            <div className="profile-avatar-wrapper">
+              {profile?.avatarUrl ? (
+                <img src={profile.avatarUrl} alt={profile.name} className="profile-avatar" />
+              ) : (
+                <div className="profile-avatar-placeholder">{profile?.name?.charAt(0)?.toUpperCase() || '?'}</div>
+              )}
+            </div>
+            <div className="profile-details">
+              <h1 className="profile-name">{profile?.name}</h1>
+              <p className="profile-bio">{profile?.bio || 'Aucune bio'}</p>
+              <div className="profile-stats">
+                <div className="stat-item">
+                  <span className="stat-value">{friends.length}</span>
+                  <span className="stat-label">Amis</span>
+                </div>
+                <div className="stat-item">
+                  <span className="stat-value">{myTickets.length}</span>
+                  <span className="stat-label">Billets</span>
+                </div>
+                <div className="stat-item">
+                  <span className="stat-value">{earnedBadges.length}</span>
+                  <span className="stat-label">Badges</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {earnedBadges.length > 0 && (
+          <div className="profile-badges">
+            <div className="container">
+              <div className="badges-row">
+                {earnedBadges.map(badge => (
+                  <div key={badge.id} className="badge-item" title={badge.desc}>
+                    <span className="badge-icon">{badge.icon}</span>
+                    <span className="badge-name">{badge.name}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+
       <div className="container">
-        <h1 className="page-title">Mon profil</h1>
-        
-        {message && <div className={`alert alert-${message.type}`}>{message.text}</div>}
+        {message && <div className={`alert alert-${message.type}`} onClick={() => setMessage(null)}>{message.text}</div>}
 
-        <div className="admin-form-card">
-          <h3 style={{ marginBottom: '1rem' }}>Informations du profil</h3>
-          <form onSubmit={handleSaveProfile}>
-            <div className="form-group">
-              <label className="form-label">Nom</label>
-              <input type="text" className="form-input" value={formData.name}
-                onChange={e => setFormData({ ...formData, name: e.target.value })} required />
-            </div>
-            <div className="form-group">
-              <label className="form-label">Email</label>
-              <input type="email" className="form-input" value={user?.email || ''} disabled />
-            </div>
-            <div className="form-group">
-              <label className="form-label">Bio</label>
-              <textarea className="form-input" value={formData.bio}
-                onChange={e => setFormData({ ...formData, bio: e.target.value })} rows={3}
-                placeholder="Parle-nous de toi..." />
-            </div>
-            <button type="submit" className="btn btn-primary" disabled={saving}>
-              {saving ? 'Enregistrement...' : 'Enregistrer'}
-            </button>
-          </form>
+        <div className="profile-tabs">
+          <button className={`tab-btn ${activeTab === 'profile' ? 'active' : ''}`} onClick={() => setActiveTab('profile')}>Profil</button>
+          <button className={`tab-btn ${activeTab === 'events' ? 'active' : ''}`} onClick={() => setActiveTab('events')}>Mes Events</button>
+          <button className={`tab-btn ${activeTab === 'tickets' ? 'active' : ''}`} onClick={() => setActiveTab('tickets')}>Mes Billets</button>
+          <button className={`tab-btn ${activeTab === 'friends' ? 'active' : ''}`} onClick={() => setActiveTab('friends')}>Amis</button>
+          <button className={`tab-btn ${activeTab === 'community' ? 'active' : ''}`} onClick={() => setActiveTab('community')}>Communauté</button>
         </div>
 
-        <div className="admin-form-card">
-          <h3 style={{ marginBottom: '1rem' }}>Changer le mot de passe</h3>
-          <form onSubmit={handleChangePassword}>
-            <div className="form-group">
-              <label className="form-label">Mot de passe actuel</label>
-              <input type="password" className="form-input" value={passwordData.currentPassword}
-                onChange={e => setPasswordData({ ...passwordData, currentPassword: e.target.value })} required />
+        {activeTab === 'profile' && (
+          <div className="profile-content">
+            <div className="admin-form-card">
+              <h3>Informations du profil</h3>
+              <form onSubmit={handleSaveProfile}>
+                <div className="form-group">
+                  <label className="form-label">Avatar URL</label>
+                  <input type="url" className="form-input" value={formData.avatarUrl}
+                    onChange={e => setFormData({ ...formData, avatarUrl: e.target.value })}
+                    placeholder="https://..." />
+                </div>
+                <div className="form-group">
+                  <label className="form-label">Nom</label>
+                  <input type="text" className="form-input" value={formData.name}
+                    onChange={e => setFormData({ ...formData, name: e.target.value })} required />
+                </div>
+                <div className="form-group">
+                  <label className="form-label">Email</label>
+                  <input type="email" className="form-input" value={user?.email || ''} disabled />
+                </div>
+                <div className="form-group">
+                  <label className="form-label">Bio</label>
+                  <textarea className="form-input" value={formData.bio}
+                    onChange={e => setFormData({ ...formData, bio: e.target.value })} rows={3}
+                    placeholder="Parle-nous de toi..." />
+                </div>
+                <button type="submit" className="btn btn-primary" disabled={saving}>
+                  {saving ? 'Enregistrement...' : 'Enregistrer'}
+                </button>
+              </form>
             </div>
-            <div className="form-group">
-              <label className="form-label">Nouveau mot de passe</label>
-              <input type="password" className="form-input" value={passwordData.newPassword}
-                onChange={e => setPasswordData({ ...passwordData, newPassword: e.target.value })} 
-                minLength={6} required />
-            </div>
-            <button type="submit" className="btn btn-primary" disabled={saving}>
-              {saving ? 'Modification...' : 'Changer le mot de passe'}
-            </button>
-          </form>
-        </div>
 
-        <div className="admin-form-card">
-          <h3 style={{ marginBottom: '1rem' }}>Partager TRIP</h3>
-          <p style={{ color: 'rgba(255,255,255,0.6)', marginBottom: '1rem' }}>
-            Invite tes amis à découvrir TRIP et réservez vos prochains événements ensemble !
+            <div className="admin-form-card">
+              <h3>Changer le mot de passe</h3>
+              <form onSubmit={handleChangePassword}>
+                <div className="form-group">
+                  <label className="form-label">Mot de passe actuel</label>
+                  <input type="password" className="form-input" value={passwordData.currentPassword}
+                    onChange={e => setPasswordData({ ...passwordData, currentPassword: e.target.value })} required />
+                </div>
+                <div className="form-group">
+                  <label className="form-label">Nouveau mot de passe</label>
+                  <input type="password" className="form-input" value={passwordData.newPassword}
+                    onChange={e => setPasswordData({ ...passwordData, newPassword: e.target.value })} 
+                    minLength={6} required />
+                </div>
+                <button type="submit" className="btn btn-primary" disabled={saving}>
+                  {saving ? 'Modification...' : 'Changer le mot de passe'}
+                </button>
+              </form>
+            </div>
+          </div>
+        )}
+
+        {activeTab === 'events' && (
+          <div className="profile-content">
+            <h3 style={{ marginBottom: '1.5rem' }}>Mes événements à venir</h3>
+            {Object.values(groupedMyTickets).filter(g => !g.isPast).length === 0 ? (
+              <div className="empty-state">
+                <span className="empty-icon">🎵</span>
+                <p>Vous n'avez pas encore de billets pour des événements à venir</p>
+                <Link to="/events" className="btn btn-primary">Découvrir des événements</Link>
+              </div>
+            ) : (
+              <div className="my-events-grid">
+                {Object.values(groupedMyTickets).filter(g => !g.isPast).map(group => (
+                  <div key={group.event.id} className="my-event-card" onClick={() => navigate(`/event/${group.event.id}`)}>
+                    <div className="my-event-image" style={{ backgroundImage: group.event.imageUrl ? `url(${group.event.imageUrl})` : undefined }}>
+                      {!group.event.imageUrl && <span className="my-event-placeholder">🎵</span>}
+                      <div className="my-event-overlay" />
+                    </div>
+                    <div className="my-event-info">
+                      <h4 className="my-event-title">{group.event.title}</h4>
+                      <p className="my-event-meta">
+                        {new Date(group.event.date).toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' })} • {group.event.location}
+                      </p>
+                      <span className="my-event-count">{group.tickets.length} billet{group.tickets.length > 1 ? 's' : ''}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {Object.values(groupedMyTickets).filter(g => g.isPast).length > 0 && (
+              <>
+                <h3 style={{ margin: '2rem 0 1.5rem' }}>Événements passés</h3>
+                <div className="my-events-grid past-events">
+                  {Object.values(groupedMyTickets).filter(g => g.isPast).map(group => (
+                    <div key={group.event.id} className="my-event-card past" onClick={() => navigate(`/event/${group.event.id}`)}>
+                      <div className="my-event-image" style={{ backgroundImage: group.event.imageUrl ? `url(${group.event.imageUrl})` : undefined }}>
+                        {!group.event.imageUrl && <span className="my-event-placeholder">🎵</span>}
+                      </div>
+                      <div className="my-event-info">
+                        <h4 className="my-event-title">{group.event.title}</h4>
+                        <p className="my-event-meta">{new Date(group.event.date).toLocaleDateString('fr-FR')}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </>
+            )}
+          </div>
+        )}
+
+        {activeTab === 'tickets' && (
+          <div className="profile-content">
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
+              <h3>Mes billets</h3>
+              <Link to="/tickets" className="btn btn-outline btn-sm">Voir tous mes billets</Link>
+            </div>
+            
+            {myTickets.length === 0 ? (
+              <div className="empty-state">
+                <span className="empty-icon">🎫</span>
+                <p>Vous n'avez pas de billets</p>
+                <Link to="/events" className="btn btn-primary">Réserver un événement</Link>
+              </div>
+            ) : (
+              <>
+                <div className="resale-section">
+                  <h4 style={{ marginBottom: '1rem' }}>Mettre en vente un billet</h4>
+                  <p style={{ color: 'rgba(255,255,255,0.6)', marginBottom: '1rem', fontSize: '0.9rem' }}>
+                    Vous pouvez revendre vos billets pour des événements à venir
+                  </p>
+                  <div className="resale-tickets-grid">
+                    {myTickets.filter(t => !t.scanned && new Date(t.event.date) > new Date()).map(ticket => {
+                      const hasListing = myListings.some(l => l.ticketId === ticket.id && l.status === 'ACTIVE')
+                      return (
+                        <div key={ticket.id} className="resale-ticket-card">
+                          <div className="resale-ticket-info">
+                            <h5>{ticket.event.title}</h5>
+                            <p>{new Date(ticket.event.date).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })} • {ticket.event.location}</p>
+                            {hasListing ? (
+                              <span className="listing-badge listed">En vente</span>
+                            ) : (
+                              <button 
+                                className="btn btn-primary btn-sm" 
+                                onClick={() => setShowListModal(ticket)}
+                              >
+                                Mettre en vente
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+
+                {myListings.length > 0 && (
+                  <div className="my-listings-section" style={{ marginTop: '2rem' }}>
+                    <h4 style={{ marginBottom: '1rem' }}>Mes annonces actives</h4>
+                    <div className="listings-grid">
+                      {myListings.filter(l => l.status === 'ACTIVE').map(listing => (
+                        <div key={listing.id} className="listing-card">
+                          <div className="listing-info">
+                            <h5>{listing.ticket.event.title}</h5>
+                            <p>{new Date(listing.ticket.event.date).toLocaleDateString('fr-FR')}</p>
+                            <span className="listing-price">{listing.price.toFixed(2)}€</span>
+                          </div>
+                          <button 
+                            className="btn btn-outline btn-sm"
+                            onClick={() => handleCancelListing(listing.id)}
+                          >
+                            Supprimer
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </>
+            )}
+
+            {showListModal && (
+              <div className="modal-overlay" onClick={() => setShowListModal(null)}>
+                <div className="modal-content" onClick={e => e.stopPropagation()}>
+                  <button className="modal-close" onClick={() => setShowListModal(null)}>×</button>
+                  <h3 style={{ marginBottom: '0.5rem' }}>Mettre en vente</h3>
+                  <p style={{ color: 'rgba(255,255,255,0.5)', marginBottom: '1.5rem', fontSize: '0.9rem' }}>
+                    {showListModal.event.title}
+                  </p>
+                  <div className="form-group">
+                    <label className="form-label">Prix de vente (€)</label>
+                    <input 
+                      type="number" 
+                      step="0.01" 
+                      min="0"
+                      className="form-input"
+                      value={listPrice}
+                      onChange={e => setListPrice(e.target.value)}
+                      placeholder="0.00"
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label">Description (optionnel)</label>
+                    <textarea 
+                      className="form-input"
+                      value={listDescription}
+                      onChange={e => setListDescription(e.target.value)}
+                      placeholder="Informações supplémentaires..."
+                      rows={3}
+                    />
+                  </div>
+                  <div style={{ display: 'flex', gap: '0.75rem', marginTop: '0.5rem' }}>
+                    <button className="btn btn-outline" style={{ flex: 1 }} onClick={() => setShowListModal(null)}>Annuler</button>
+                    <button 
+                      className="btn btn-primary" 
+                      style={{ flex: 2 }}
+                      disabled={!listPrice || listingLoading}
+                      onClick={() => handleCreateListing(showListModal.id)}
+                    >
+                      {listingLoading ? 'Publication...' : 'Publier'}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {activeTab === 'friends' && (
+          <div className="profile-content">
+            {friendRequests.length > 0 && (
+              <div className="friend-requests-section">
+                <h3>Demandes d'ami ({friendRequests.length})</h3>
+                <div className="friend-requests-list">
+                  {friendRequests.map(req => (
+                    <div key={req.id} className="friend-request-card">
+                      <div className="friend-request-avatar">
+                        {req.sender.avatarUrl ? (
+                          <img src={req.sender.avatarUrl} alt={req.sender.name} />
+                        ) : (
+                          <span>{req.sender.name.charAt(0).toUpperCase()}</span>
+                        )}
+                      </div>
+                      <div className="friend-request-info">
+                        <span className="friend-request-name">{req.sender.name}</span>
+                        <span className="friend-request-bio">{req.sender.bio || ''}</span>
+                      </div>
+                      <div className="friend-request-actions">
+                        <button className="btn btn-primary btn-sm" onClick={() => handleAcceptRequest(req.id)}>Accepter</button>
+                        <button className="btn btn-outline btn-sm" onClick={() => handleRejectRequest(req.id)}>Refuser</button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <div className="search-friends-section">
+              <h3>Ajouter des amis</h3>
+              <input type="text" className="form-input" placeholder="Rechercher des utilisateurs..."
+                value={searchQuery} onChange={e => handleSearchFriends(e.target.value)} />
+              {searchResults.length > 0 && (
+                <div className="search-results">
+                  {searchResults.map(u => (
+                    <div key={u.id} className="search-result-item">
+                      <div className="search-result-avatar">
+                        {u.avatarUrl ? <img src={u.avatarUrl} alt={u.name} /> : <span>{u.name.charAt(0).toUpperCase()}</span>}
+                      </div>
+                      <div className="search-result-info">
+                        <span className="search-result-name">{u.name}</span>
+                        <span className="search-result-bio">{u.bio || ''}</span>
+                      </div>
+                      <div className="search-result-action">
+                        {u.isFriend ? (
+                          <span className="already-friend">Déjà ami</span>
+                        ) : u.requestSent ? (
+                          <span className="request-sent">En attente</span>
+                        ) : u.requestReceived ? (
+                          <button className="btn btn-primary btn-sm" onClick={() => handleAcceptRequest(u.id)}>Accepter</button>
+                        ) : (
+                          <button className="btn btn-primary btn-sm" onClick={() => handleSendRequest(u.id)}>Ajouter</button>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div className="friends-list-section">
+              <h3>Mes amis ({friends.length})</h3>
+              {friends.length === 0 ? (
+                <p className="empty-state">Vous n'avez pas encore d'amis. Recherchez des utilisateurs pour commencer !</p>
+              ) : (
+                <div className="friends-grid">
+                  {friends.map(friend => (
+                    <div key={friend.id} className="friend-card">
+                      <div className="friend-card-avatar">
+                        {friend.avatarUrl ? <img src={friend.avatarUrl} alt={friend.name} /> : <span>{friend.name.charAt(0).toUpperCase()}</span>}
+                      </div>
+                      <span className="friend-card-name">{friend.name}</span>
+                      <span className="friend-card-bio">{friend.bio || ''}</span>
+                      <button className="btn btn-outline btn-sm" onClick={() => handleRemoveFriend(friend.id)}>Supprimer</button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {activeTab === 'community' && (
+          <div className="profile-content">
+            <div className="community-feed">
+              <div className="create-post-card">
+                <h3>Partager avec vos amis</h3>
+                <form onSubmit={handleCreatePost}>
+                  <textarea className="form-input" placeholder="Qu'avez-vous en tête ? Parlez de vos événements préférés..."
+                    value={newPost} onChange={e => setNewPost(e.target.value)} rows={3} />
+                  <button type="submit" className="btn btn-primary" disabled={posting || !newPost.trim()}>
+                    {posting ? 'Publication...' : 'Publier'}
+                  </button>
+                </form>
+              </div>
+
+              <div className="posts-list">
+                <h3>Fil d'actualité</h3>
+                {posts.length === 0 ? (
+                  <p className="empty-state">Aucune publication. Ajoutez des amis pour voir leurs publications !</p>
+                ) : (
+                  posts.map(post => (
+                    <div key={post.id} className="post-card">
+                      <div className="post-header">
+                        <div className="post-author-avatar">
+                          {post.user.avatarUrl ? <img src={post.user.avatarUrl} alt={post.user.name} /> : <span>{post.user.name.charAt(0).toUpperCase()}</span>}
+                        </div>
+                        <div className="post-author-info">
+                          <span className="post-author-name">{post.user.name}</span>
+                          <span className="post-date">{new Date(post.createdAt).toLocaleDateString('fr-FR')}</span>
+                        </div>
+                        {post.user.id === user?.id && (
+                          <button className="post-delete-btn" onClick={() => handleDeletePost(post.id)}>×</button>
+                        )}
+                      </div>
+                      <div className="post-content">{post.content}</div>
+                      {post.event && (
+                        <div className="post-event">
+                          <span className="post-event-label">Événement lié:</span>
+                          <span className="post-event-title">{post.event.title}</span>
+                        </div>
+                      )}
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function ComingSoon() {
+  const [email, setEmail] = useState('')
+  const [submitted, setSubmitted] = useState(false)
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState(null)
+
+  const handleSubmit = async (e) => {
+    e.preventDefault()
+    setLoading(true)
+    setError(null)
+    try {
+      await api.post('/api/v1/waitlist/general', { email })
+      setSubmitted(true)
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  return (
+    <div className="coming-soon-page">
+      <div className="coming-soon-hero">
+        <div className="coming-soon-content">
+          <span className="coming-soon-badge">Bientot disponible</span>
+          <h1 className="coming-soon-title">
+            <span className="title-line">VIBREZ</span>
+            <span className="title-line accent">AVEC TRIP</span>
+          </h1>
+          <p className="coming-soon-subtitle">
+            La nouvelle plateforme de billetterie arrive. Soyez les premiers informés des événements exclusifs.
           </p>
-          <button className="btn btn-outline" onClick={() => {
-            navigator.clipboard.writeText(window.location.origin)
-            setMessage({ type: 'success', text: 'Lien copié !' })
-          }}>
-            Copier le lien
-          </button>
+          
+          {submitted ? (
+            <div className="coming-soon-success">
+              <span className="success-icon">✓</span>
+              <p>Vous êtes inscrit ! Nous vous contacterons dès qu'un nouvel événement sera disponible.</p>
+            </div>
+          ) : (
+            <form onSubmit={handleSubmit} className="coming-soon-form">
+              <div className="form-group">
+                <input 
+                  type="email" 
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="Votre email pour être alerté en priorité"
+                  className="form-input coming-soon-input"
+                  required
+                />
+                <button type="submit" className="btn btn-primary" disabled={loading}>
+                  {loading ? 'Envoi...' : 'Être alerté'}
+                </button>
+              </div>
+              {error && <div className="alert alert-error">{error}</div>}
+            </form>
+          )}
+
+          <div className="coming-soon-features">
+            <div className="feature-item">
+              <span className="feature-icon">🎫</span>
+              <span>Billets garantis</span>
+            </div>
+            <div className="feature-item">
+              <span className="feature-icon">🔒</span>
+              <span>Paiement sécurisé</span>
+            </div>
+            <div className="feature-item">
+              <span className="feature-icon">💰</span>
+              <span>Meilleurs prix</span>
+            </div>
+          </div>
         </div>
+        
+        <div className="coming-soon-visual">
+          <div className="visual-circle"></div>
+          <div className="visual-circle delay-1"></div>
+          <div className="visual-circle delay-2"></div>
+          <span className="visual-icon">✦</span>
+        </div>
+      </div>
+
+      <div className="coming-soon-footer-notice">
+        <p>🔄 Revente entre particuliers • Tous les billets sont vérifiés et garantis valides</p>
       </div>
     </div>
   )
@@ -1823,6 +2709,430 @@ function ProtectedRoute({ children }) {
   return children
 }
 
+function AdminWrapper() {
+  const { user, logout, loading } = useAuth()
+  if (loading) return <div className="loading"><div className="spinner" /></div>
+  if (!user) return <Navigate to="/login" />
+  if (user.role !== 'ADMIN') return <Navigate to="/" />
+  return <AdminDashboard user={user} onLogout={logout} />
+}
+
+function Contact() {
+  const [formData, setFormData] = useState({ name: '', email: '', subject: '', message: '' })
+  const [submitted, setSubmitted] = useState(false)
+  const [loading, setLoading] = useState(false)
+  const { user } = useAuth()
+
+  useEffect(() => {
+    if (user) {
+      setFormData(prev => ({ ...prev, name: user.name || '', email: user.email || '' }))
+    }
+  }, [user])
+
+  const handleSubmit = async (e) => {
+    e.preventDefault()
+    setLoading(true)
+    try {
+      await api.post('/api/v1/contact', formData)
+      setSubmitted(true)
+    } catch (err) {
+      alert(err.message)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  return (
+    <div className="page contact-page">
+      <div className="container">
+        <div className="contact-container">
+          <div className="contact-info">
+            <h1 className="page-title">Contactez-nous</h1>
+            <p className="contact-subtitle">Une question ? Besoin d'aide ? Nous sommes là pour vous.</p>
+            
+            <div className="contact-methods">
+              <div className="contact-method">
+                <span className="contact-icon">📧</span>
+                <div>
+                  <h4>Email</h4>
+                  <p>support@trip.example.com</p>
+                </div>
+              </div>
+              <div className="contact-method">
+                <span className="contact-icon">📞</span>
+                <div>
+                  <h4>Téléphone</h4>
+                  <p>Lun-Ven: 9h-18h</p>
+                </div>
+              </div>
+              <div className="contact-method">
+                <span className="contact-icon">💬</span>
+                <div>
+                  <h4>FAQ</h4>
+                  <p>Réponses aux questions fréquentes</p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="contact-form-container">
+            {submitted ? (
+              <div className="success-message">
+                <span className="success-icon">✓</span>
+                <h3>Message envoyé !</h3>
+                <p>Nous vous répondrons dans les plus brefs délais.</p>
+                <button className="btn btn-primary" onClick={() => setSubmitted(false)}>Envoyer un autre message</button>
+              </div>
+            ) : (
+              <form onSubmit={handleSubmit} className="contact-form">
+                <h3>Envoyez-nous un message</h3>
+                <div className="form-group">
+                  <label className="form-label">Nom</label>
+                  <input type="text" value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} className="form-input" required />
+                </div>
+                <div className="form-group">
+                  <label className="form-label">Email</label>
+                  <input type="email" value={formData.email} onChange={e => setFormData({...formData, email: e.target.value})} className="form-input" required />
+                </div>
+                <div className="form-group">
+                  <label className="form-label">Sujet</label>
+                  <select value={formData.subject} onChange={e => setFormData({...formData, subject: e.target.value})} className="form-input" required>
+                    <option value="">Sélectionnez un sujet</option>
+                    <option value="order">Question sur une commande</option>
+                    <option value="ticket">Problème avec un billet</option>
+                    <option value="payment">Paiement</option>
+                    <option value="account">Mon compte</option>
+                    <option value="other">Autre</option>
+                  </select>
+                </div>
+                <div className="form-group">
+                  <label className="form-label">Message</label>
+                  <textarea value={formData.message} onChange={e => setFormData({...formData, message: e.target.value})} className="form-input" rows={5} required placeholder="Décrivez votre problème..." />
+                </div>
+                <button type="submit" className="btn btn-primary btn-lg" disabled={loading}>
+                  {loading ? 'Envoi...' : 'Envoyer le message'}
+                </button>
+              </form>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function Legal() {
+  const { type } = useParams()
+  
+  const content = {
+    terms: {
+      title: 'Conditions Générales d\'Utilisation',
+      lastUpdate: 'Dernière mise à jour : Février 2026',
+      sections: [
+        { title: '1. Acceptance des conditions', content: 'En utilisant TRIP, vous acceptez ces conditions. Si vous n\'acceptez pas ces conditions, veuillez ne pas utiliser notre plateforme.' },
+        { title: '2. Description du service', content: 'TRIP est une plateforme de revente de billets entre particuliers. Nous facilitons l\'achat et la vente de billets d\'événements.' },
+        { title: '3. Compte utilisateur', content: 'Vous devez créer un compte pour acheter ou vendre des billets. Vous êtes responsable de la confidentialité de votre mot de passe.' },
+        { title: '4. Achat de billets', content: 'Les billets achetés sur TRIP sont garantis valides. En cas de billet invalide, nous proposons un remboursement intégral.' },
+        { title: '5. Vente de billets', content: 'Vous pouvez vendre vos billets sur notre plateforme. Les billets doivent être légitime et correspondre à l\'événement indiqué.' },
+        { title: '6. Paiement et frais', content: 'Les paiements sont sécurisés via Stripe. Des frais de service s\'appliquent sur chaque transaction.' },
+        { title: '7. Responsabilité', content: 'TRIP agit comme intermédiaire entre acheteurs et vendeurs. Nous ne sommes pas responsables des annulations d\'événements.' }
+      ]
+    },
+    privacy: {
+      title: 'Politique de Confidentialité',
+      lastUpdate: 'Dernière mise à jour : Février 2026',
+      sections: [
+        { title: '1. Collecte des données', content: 'Nous collectons les données nécessaires au fonctionnement du service : nom, email, historique d\'achats.' },
+        { title: '2. Utilisation des données', content: 'Vos données sont utilisées pour : traiter vos commandes, améliorer notre service, vous informer des événements.' },
+        { title: '3. Protection des données', content: 'Nous mettons en œuvre des mesures de sécurité pour protéger vos données personnelles.' },
+        { title: '4. Cookies', content: 'Nous utilisons des cookies pour améliorer votre expérience. Vous pouvez les désactiver dans votre navigateur.' },
+        { title: '5. Partage des données', content: 'Vos données ne sont pas vendues à des tiers. Elles peuvent être partagées avec nos prestataires de paiement.' }
+      ]
+    },
+    refund: {
+      title: 'Politique de Remboursement',
+      lastUpdate: 'Dernière mise à jour : Février 2026',
+      sections: [
+        { title: '1. Billet invalide', content: 'Si votre billet est invalide à l\'entrée, nous vous remboursons intégralement sous 7 jours.' },
+        { title: '2. Événement annulé', content: 'En cas d\'annulation par l\'organisateur, nous remboursons les billets selon les conditions de l\'organisateur.' },
+        { title: '3. Demande de remboursement', content: 'Contactez-nous via le formulaire de contact en précisant votre numéro de commande.' },
+        { title: '4. Délai de traitement', content: 'Les remboursements sont traités sous 5 à 10 jours ouvrés.' }
+      ]
+    }
+  }
+
+  const current = content[type] || content.terms
+
+  return (
+    <div className="page legal-page">
+      <div className="container">
+        <div className="legal-container">
+          <h1 className="page-title">{current.title}</h1>
+          <p className="legal-updated">{current.lastUpdate}</p>
+          
+          {current.sections.map((section, i) => (
+            <div key={i} className="legal-section">
+              <h3>{section.title}</h3>
+              <p>{section.content}</p>
+            </div>
+          ))}
+          
+          <div className="legal-contact">
+            <p>Questions ? <Link to="/contact">Contactez-nous</Link></p>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function Footer() {
+  const navigate = useNavigate()
+  
+  return (
+    <footer className="footer">
+      <div className="container">
+        <div className="footer-content">
+          <div className="footer-section">
+            <Link to="/" className="footer-logo">
+              <span className="logo-icon">✦</span>
+              <span className="logo-text">TRIP</span>
+            </Link>
+            <p className="footer-desc">Vibrez différemment. Des expériences uniques.</p>
+          </div>
+          
+          <div className="footer-section">
+            <h4 className="footer-title">Explorer</h4>
+            <Link to="/events" className="footer-link">Événements</Link>
+            <Link to="/calendar" className="footer-link">Calendrier</Link>
+            <Link to="/recommendations" className="footer-link">Pour vous</Link>
+          </div>
+          
+          <div className="footer-section">
+            <h4 className="footer-title">Légal</h4>
+            <Link to="/legal/terms" className="footer-link">CGV</Link>
+            <Link to="/legal/privacy" className="footer-link">Confidentialité</Link>
+            <Link to="/legal/refund" className="footer-link">Remboursement</Link>
+          </div>
+          
+          <div className="footer-section">
+            <h4 className="footer-title">Contact</h4>
+            <Link to="/contact" className="footer-link">Nous contacter</Link>
+            <Link to="/coming-soon" className="footer-link">À venir</Link>
+          </div>
+        </div>
+        
+        <div className="footer-bottom">
+          <p>&copy; {new Date().getFullYear()} TRIP. Tous droits réservés.</p>
+        </div>
+      </div>
+    </footer>
+  )
+}
+
+function Marketplace() {
+  const [listings, setListings] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [category, setCategory] = useState('')
+  const [priceRange, setPriceRange] = useState({ min: '', max: '' })
+  const [sortBy, setSortBy] = useState('newest')
+  const { user } = useAuth()
+  const navigate = useNavigate()
+
+  useEffect(() => {
+    loadListings()
+  }, [])
+
+  const loadListings = async () => {
+    setLoading(true)
+    try {
+      const data = await api.get('/api/v1/tickets/listings')
+      setListings(data || [])
+    } catch (err) {
+      console.error(err)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const filteredListings = listings
+    .filter(l => {
+      if (category && l.ticket.event.category !== category) return false
+      if (priceRange.min && l.price < parseFloat(priceRange.min)) return false
+      if (priceRange.max && l.price > parseFloat(priceRange.max)) return false
+      return true
+    })
+    .sort((a, b) => {
+      if (sortBy === 'price-low') return a.price - b.price
+      if (sortBy === 'price-high') return b.price - a.price
+      return new Date(b.createdAt) - new Date(a.createdAt)
+    })
+
+  const handleBuy = async (listingId) => {
+    if (!user) { navigate('/login'); return }
+    try {
+      const result = await api.post(`/api/v1/tickets/listings/${listingId}/buy`)
+      alert(result.message)
+      loadListings()
+    } catch (err) {
+      alert(err.message)
+    }
+  }
+
+  const getEventImage = (listing) => {
+    if (listing.ticket.event.imageUrl) return listing.ticket.event.imageUrl
+    const cat = listing.ticket.event.category
+    const images = {
+      CONCERT: 'https://images.unsplash.com/photo-1470229722913-7c0e2dbbafd3?w=400',
+      FESTIVAL: 'https://images.unsplash.com/photo-1533174072545-7a4b6ad7a6c3?w=400',
+      SPORT: 'https://images.unsplash.com/photo-1461896836934- voices0d6?w=400',
+      THEATRE: 'https://images.unsplash.com/photo-1503095396549-807759245b35?w=400',
+      CONFERENCE: 'https://images.unsplash.com/photo-1540575467063-178a50c2df87?w=400',
+      HUMOUR: 'https://images.unsplash.com/photo-1527224538127-2104bb71c51b?w=400'
+    }
+    return images[cat] || 'https://images.unsplash.com/photo-1492684223066-81342ee5ff30?w=400'
+  }
+
+  const categories = ['CONCERT', 'FESTIVAL', 'SPORT', 'THEATRE', 'CONFERENCE', 'HUMOUR']
+  const categoryLabels = {
+    CONCERT: 'Concert', FESTIVAL: 'Festival', SPORT: 'Sport',
+    THEATRE: 'Théâtre', CONFERENCE: 'Conférence', HUMOUR: 'Humour'
+  }
+
+  if (loading) return <div className="loading"><div className="spinner" /></div>
+
+  return (
+    <div className="page marketplace-page">
+      <div className="container">
+        <h1 className="page-title">Marketplace</h1>
+        <p className="page-subtitle" style={{ color: 'rgba(255,255,255,0.6)', marginBottom: '2rem' }}>
+          Achetez et vendez vos billets entre particuliers
+        </p>
+        
+        <div className="marketplace-filters">
+          <div className="filter-group">
+            <label className="filter-label">Catégorie</label>
+            <select 
+              className="filter-select" 
+              value={category} 
+              onChange={(e) => setCategory(e.target.value)}
+            >
+              <option value="">Toutes</option>
+              {categories.map(c => (
+                <option key={c} value={c}>{categoryLabels[c]}</option>
+              ))}
+            </select>
+          </div>
+          <div className="filter-group">
+            <label className="filter-label">Prix min</label>
+            <input 
+              type="number" 
+              className="filter-input" 
+              placeholder="0€"
+              value={priceRange.min}
+              onChange={(e) => setPriceRange({...priceRange, min: e.target.value})}
+            />
+          </div>
+          <div className="filter-group">
+            <label className="filter-label">Prix max</label>
+            <input 
+              type="number" 
+              className="filter-input" 
+              placeholder="500€"
+              value={priceRange.max}
+              onChange={(e) => setPriceRange({...priceRange, max: e.target.value})}
+            />
+          </div>
+          <div className="filter-group">
+            <label className="filter-label">Trier par</label>
+            <select 
+              className="filter-select" 
+              value={sortBy}
+              onChange={(e) => setSortBy(e.target.value)}
+            >
+              <option value="newest">Plus récents</option>
+              <option value="price-low">Prix croissant</option>
+              <option value="price-high">Prix décroissant</option>
+            </select>
+          </div>
+        </div>
+        
+        {filteredListings.length === 0 ? (
+          <div className="empty-state">
+            <span className="empty-icon">🎫</span>
+            <p>{listings.length === 0 ? 'Aucun billet en vente actuellement' : 'Aucun résultat pour ces filtres'}</p>
+            {user && listings.length === 0 && <Link to="/profile" className="btn btn-primary">Mettre en vente un billet</Link>}
+          </div>
+        ) : (
+          <div className="events-grid">
+            {filteredListings.map(listing => (
+              <div key={listing.id} className="event-card marketplace-card">
+                <div className="event-card-media">
+                  <div 
+                    className="event-card-image" 
+                    style={{ backgroundImage: `url(${getEventImage(listing)})` }} 
+                  />
+                  <div className="event-card-overlay" />
+                  <span className="event-card-category" style={{ background: 'var(--primary)' }}>
+                    {categoryLabels[listing.ticket.event.category] || 'Revente'}
+                  </span>
+                  {listing.ticket.event.date && (
+                    <div className="event-countdown" style={{
+                      position: 'absolute', bottom: '10px', left: '10px',
+                      background: 'rgba(0,0,0,0.7)', padding: '4px 8px',
+                      borderRadius: '4px', fontSize: '0.75rem'
+                    }}>
+                      {new Date(listing.ticket.event.date).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })}
+                    </div>
+                  )}
+                </div>
+                <div className="event-card-content">
+                  <h3 className="event-card-title">{listing.ticket.event.title}</h3>
+                  <p className="event-card-date">
+                    {listing.ticket.event.location}
+                  </p>
+                  <div className="seller-info">
+                    <span className="seller-avatar">{listing.seller?.name?.charAt(0)?.toUpperCase() || '?'}</span>
+                    <span className="seller-name">{listing.seller?.name || 'Vendeur'}</span>
+                  </div>
+                  <div className="event-card-footer">
+                    <div className="price-info">
+                      <span className="event-card-price" style={{ color: 'var(--acid-green)' }}>
+                        {listing.price.toFixed(2)}€
+                      </span>
+                      {listing.ticket.event.price && (
+                        <span className="original-price" style={{ 
+                          color: 'rgba(255,255,255,0.4)', 
+                          textDecoration: 'line-through',
+                          fontSize: '0.8rem',
+                          marginLeft: '8px'
+                        }}>
+                          {listing.ticket.event.price}€
+                        </span>
+                      )}
+                    </div>
+                    <button 
+                      className="btn btn-primary btn-sm" 
+                      onClick={(e) => { e.stopPropagation(); handleBuy(listing.id) }}
+                    >
+                      Acheter
+                    </button>
+                  </div>
+                  {listing.description && (
+                    <p style={{ fontSize: '0.8rem', color: 'rgba(255,255,255,0.5)', marginTop: '0.5rem' }}>
+                      {listing.description}
+                    </p>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
 export default function App() {
   return (
     <BrowserRouter>
@@ -1836,13 +3146,18 @@ export default function App() {
           <Route path="/register" element={<Register />} />
           <Route path="/recommendations" element={<Recommendations />} />
           <Route path="/calendar" element={<Calendar />} />
+          <Route path="/coming-soon" element={<ComingSoon />} />
+          <Route path="/contact" element={<Contact />} />
+          <Route path="/legal/:type" element={<Legal />} />
           <Route path="/waitlist" element={<ProtectedRoute><Waitlist /></ProtectedRoute>} />
           <Route path="/orders" element={<ProtectedRoute><Orders /></ProtectedRoute>} />
           <Route path="/favorites" element={<ProtectedRoute><Favorites /></ProtectedRoute>} />
           <Route path="/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
           <Route path="/tickets" element={<ProtectedRoute><Tickets /></ProtectedRoute>} />
-          <Route path="/admin" element={<ProtectedRoute><Admin /></ProtectedRoute>} />
+          <Route path="/marketplace" element={<Marketplace />} />
+          <Route path="/admin" element={<AdminWrapper />} />
         </Routes>
+        <Footer />
       </AuthProvider>
     </BrowserRouter>
   )
