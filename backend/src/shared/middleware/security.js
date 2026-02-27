@@ -1,6 +1,7 @@
 import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
 import cors from 'cors';
+import crypto from 'crypto';
 
 const createRateLimiter = (windowMs, max, keyGenerator = null) => {
   return rateLimit({
@@ -19,17 +20,35 @@ const createRateLimiter = (windowMs, max, keyGenerator = null) => {
   });
 };
 
+export const generateNonce = (req, res, next) => {
+  const nonce = crypto.randomBytes(16).toString('base64');
+  res.locals.nonce = nonce;
+  next();
+};
+
+const getCSPDirectives = (req, res) => {
+  const nonce = res.locals.nonce || '';
+  return {
+    defaultSrc: ["'self'"],
+    scriptSrc: ["'self'", `'nonce-${nonce}'`, 'https://js.stripe.com'],
+    styleSrc: ["'self'", `'nonce-${nonce}'`, 'https://fonts.googleapis.com'],
+    imgSrc: ["'self'", "data:", "blob:", "https:", "http:"],
+    mediaSrc: ["'self'", "blob:", "https:"],
+    connectSrc: ["'self'", "https://api.stripe.com", "https://events.stripe.com"],
+    frameSrc: ["'self'", "https://js.stripe.com", "https://hooks.stripe.com"],
+    fontSrc: ["'self'", "data:", "https://fonts.gstatic.com"],
+    objectSrc: ["'none'"],
+    baseUri: ["'self'"],
+    formAction: ["'self'"],
+    frameAncestors: ["'none'"]
+  };
+};
+
 export const securityMiddleware = [
+  generateNonce,
   helmet({
     contentSecurityPolicy: {
-      directives: {
-        defaultSrc: ["'self'"],
-        scriptSrc: ["'self'", "'unsafe-inline'"],
-        styleSrc: ["'self'", "'unsafe-inline'"],
-        imgSrc: ["'self'", "data:", "blob:", "https://assets.mixkit.co"],
-        mediaSrc: ["'self'", "https://assets.mixkit.co"],
-        connectSrc: ["'self'", "http://localhost:3000", "http://localhost:8081"],
-      }
+      directives: getCSPDirectives
     },
     hsts: {
       maxAge: 31536000,

@@ -13,8 +13,11 @@ import ticketRoutes from './modules/tickets/tickets.routes.js';
 import paymentRoutes from './modules/payment/payment.routes.js';
 import waitlistRoutes from './modules/waitlist/waitlist.routes.js';
 import recommendationsRoutes from './modules/recommendations/recommendations.routes.js';
-import analyticsRoutes from './modules/analytics/analytics.routes.js';
 import adminRoutes from './modules/admin/admin.routes.js';
+import analyticsRoutes from './modules/analytics/analytics.routes.js';
+import contactRoutes from './modules/contact/contact.routes.js';
+import friendsRoutes from './modules/friends/friends.routes.js';
+import sseRoutes from './modules/notifications/sse.routes.js';
 import { errorHandler } from './shared/middleware/errorHandler.js';
 import { rateLimiters } from './shared/middleware/security.js';
 import { redis } from './shared/middleware/cache.js';
@@ -87,8 +90,11 @@ app.use('/api/v1/recommendations', recommendationsRoutes);
 app.use('/api/v1/favorites', (await import('./modules/favorites/favorites.routes.js')).default);
 app.use('/api/v1/pricing', (await import('./modules/pricing/pricing.routes.js')).default);
 app.use('/api/v1/profile', (await import('./modules/profile/profile.routes.js')).default);
+app.use('/api/v1/friends', friendsRoutes);
 app.use('/api/v1/admin/analytics', analyticsRoutes);
 app.use('/api/v1/admin', adminRoutes);
+app.use('/api/v1/contact', contactRoutes);
+app.use('/api/v1/notifications', sseRoutes);
 
 app.get('/api/health', async (req, res) => {
   let dbStatus = 'ok';

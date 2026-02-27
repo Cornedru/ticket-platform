@@ -24,10 +24,25 @@ model User {
   tickets   Ticket[]
   waitlist  WaitlistEntry[]
   favorites Favorite[]
+  listings  TicketListing[]
+  refreshTokens RefreshToken[]
+
+  sentFriendRequests     FriendRequest[] @relation("FriendRequestSent")
+  receivedFriendRequests FriendRequest[] @relation("FriendRequestReceived")
+  friends                Friendship[] @relation("FriendshipUser1")
+  friends2               Friendship[] @relation("FriendshipUser2")
+  posts                  Post[]
+  comments               Comment[]
+  userBadges             UserBadge[]
+
+  @@index([email])
+  @@index([role])
+  @@index([createdAt])
 }
 
 enum Role {
   USER
+  ORGANIZER
   ADMIN
 }
 
@@ -51,6 +66,19 @@ model Event {
   waitlist      WaitlistEntry[]
   favorites     Favorite[]
   priceHistory  PriceHistory[]
+  posts         Post[]
+
+  @@index([date])
+  @@index([category])
+  @@index([location])
+  @@index([price])
+  @@index([title])
+  @@index([availableSeats])
+  @@index([date, category])
+  @@index([date, availableSeats])
+  @@index([createdAt, category])
+  @@index([date, location])
+  @@index([availableSeats, date])
 }
 
 enum EventCategory {
@@ -71,12 +99,21 @@ model Order {
   totalPrice  Float
   status      OrderStatus @default(PENDING)
   paymentId   String?
+  expiresAt   DateTime?
   createdAt   DateTime    @default(now())
   updatedAt   DateTime    @updatedAt
 
   user        User        @relation(fields: [userId], references: [id])
   event       Event       @relation(fields: [eventId], references: [id])
   tickets     Ticket[]
+
+  @@index([userId])
+  @@index([eventId])
+  @@index([status])
+  @@index([createdAt])
+  @@index([expiresAt])
+  @@index([userId, status])
+  @@index([eventId, status])
 }
 
 enum OrderStatus {
@@ -105,6 +142,15 @@ model Ticket {
   order           Order       @relation(fields: [orderId], references: [id])
   event           Event       @relation(fields: [eventId], references: [id])
   user            User        @relation(fields: [userId], references: [id])
+  listing         TicketListing?
+
+  @@index([userId])
+  @@index([eventId])
+  @@index([orderId])
+  @@index([scanned])
+  @@index([originalUserId])
+  @@index([userId, scanned])
+  @@index([eventId, scanned])
 }
 
 model WaitlistEntry {
@@ -141,4 +187,163 @@ model PriceHistory {
   recordedAt DateTime @default(now())
 
   event     Event    @relation(fields: [eventId], references: [id])
+}
+
+model FriendRequest {
+  id          String   @id @default(uuid())
+  senderId    String
+  receiverId  String
+  status      FriendRequestStatus @default(PENDING)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  sender      User     @relation("FriendRequestSent", fields: [senderId], references: [id])
+  receiver    User     @relation("FriendRequestReceived", fields: [receiverId], references: [id])
+
+  @@unique([senderId, receiverId])
+  @@index([senderId])
+  @@index([receiverId])
+  @@index([status])
+}
+
+enum FriendRequestStatus {
+  PENDING
+  ACCEPTED
+  REJECTED
+}
+
+model Friendship {
+  id        String   @id @default(uuid())
+  userId1   String
+  userId2   String
+  createdAt DateTime @default(now())
+
+  user1     User     @relation("FriendshipUser1", fields: [userId1], references: [id])
+  user2     User     @relation("FriendshipUser2", fields: [userId2], references: [id])
+
+  @@unique([userId1, userId2])
+  @@index([userId1])
+  @@index([userId2])
+}
+
+model Post {
+  id        String   @id @default(uuid())
+  userId    String
+  content   String
+  eventId   String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user      User     @relation(fields: [userId], references: [id])
+  event     Event?   @relation(fields: [eventId], references: [id], onDelete: SetNull)
+  comments  Comment[]
+
+  @@index([userId])
+  @@index([eventId])
+  @@index([createdAt])
+}
+
+model Comment {
+  id        String   @id @default(uuid())
+  userId    String
+  postId    String
+  content   String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user      User     @relation(fields: [userId], references: [id])
+  post      Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([postId])
+  @@index([createdAt])
+}
+
+model TicketListing {
+  id          String   @id @default(uuid())
+  ticketId    String   @unique
+  sellerId    String
+  price       Float
+  status      ListingStatus @default(ACTIVE)
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  ticket      Ticket   @relation(fields: [ticketId], references: [id])
+  seller      User     @relation(fields: [sellerId], references: [id])
+
+  @@index([sellerId])
+  @@index([status])
+}
+
+enum ListingStatus {
+  ACTIVE
+  SOLD
+  CANCELLED
+  EXPIRED
+}
+
+model RefreshToken {
+  id        String   @id @default(uuid())
+  userId    String
+  token     String   @unique
+  expiresAt DateTime
+  revoked   Boolean  @default(false)
+  createdAt DateTime @default(now())
+  ipAddress String?
+  userAgent String?
+
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([token])
+  @@index([expiresAt])
+}
+
+model WebhookEvent {
+  id            String   @id @default(uuid())
+  stripeEventId String   @unique
+  type          String
+  processed     Boolean  @default(false)
+  createdAt     DateTime @default(now())
+
+  @@index([processed])
+  @@index([type])
+}
+
+model Badge {
+  id          String   @id @default(uuid())
+  name        String
+  description String
+  icon        String
+  category    BadgeCategory @default(ACHIEVEMENT)
+  condition   String?
+  points      Int      @default(0)
+  createdAt   DateTime @default(now())
+
+  userBadges  UserBadge[]
+
+  @@index([category])
+}
+
+enum BadgeCategory {
+  ACHIEVEMENT
+  EVENT
+  SOCIAL
+  VIP
+  SPECIAL
+}
+
+model UserBadge {
+  id        String   @id @default(uuid())
+  userId    String
+  badgeId   String
+  earnedAt  DateTime @default(now())
+
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  badge     Badge    @relation(fields: [badgeId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, badgeId])
+  @@index([userId])
+  @@index([badgeId])
 }

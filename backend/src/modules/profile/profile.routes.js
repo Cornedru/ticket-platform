@@ -93,4 +93,21 @@ router.put('/push-token', authenticate, async (req, res, next) => {
   }
 });
 
+router.get('/badges', authenticate, async (req, res, next) => {
+  try {
+    const prisma = req.app.locals.prisma;
+    const userId = req.user.id;
+
+    const userBadges = await prisma.userBadge.findMany({
+      where: { userId },
+      include: { badge: true },
+      orderBy: { earnedAt: 'desc' }
+    });
+
+    res.json({ userBadges });
+  } catch (err) {
+    next(err);
+  }
+});
+
 export default router;

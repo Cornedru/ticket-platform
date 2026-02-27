@@ -1,4 +1,4 @@
-version: '3.8'
+version: '2.4'
 
 services:
   # ===================
@@ -56,7 +56,8 @@ services:
       NODE_ENV: production
       DATABASE_URL: postgresql://ticket_user:ticket_pass@postgres:5432/ticket_platform?schema=public&pool=20&connection_limit=20
       JWT_SECRET: ${JWT_SECRET:-change_this_in_production}
-      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-7d}
+      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-15m}
+      JWT_REFRESH_EXPIRES_IN: ${JWT_REFRESH_EXPIRES_IN:-7d}
       BCRYPT_ROUNDS: ${BCRYPT_ROUNDS:-12}
       REDIS_URL: ${REDIS_URL:-redis://redis:6379}
       CACHE_TTL_EVENTS: ${CACHE_TTL_EVENTS:-30}
@@ -70,6 +71,14 @@ services:
       LOG_LEVEL: ${LOG_LEVEL:-info}
       PLATFORM_COMMISSION: ${PLATFORM_COMMISSION:-8}
       MINIMUM_ORDER: ${MINIMUM_ORDER:-5}
+      ORDER_EXPIRY_MINUTES: ${ORDER_EXPIRY_MINUTES:-10}
+      TRANSFER_BLOCK_HOURS: ${TRANSFER_BLOCK_HOURS:-48}
+      SMTP_HOST: ${SMTP_HOST:-smtp.ethereal.email}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASS: ${SMTP_PASS:-}
+      FROM_EMAIL: ${FROM_EMAIL:-noreply@trip.com}
+      APP_URL: ${APP_URL:-http://localhost:8081}
     ports:
       - "5000:5000"
     depends_on:
@@ -80,14 +89,6 @@ services:
     networks:
       - ticket-network
     restart: unless-stopped
-    deploy:
-      resources:
-        limits:
-          cpus: '1'
-          memory: 1G
-        reservations:
-          cpus: '0.5'
-          memory: 512M
 
   # ===================
   # Frontend (with Nginx + SSL)
@@ -102,11 +103,6 @@ services:
     container_name: ticket-platform-frontend
     ports:
       - "8081:80"
-      - "8443:443"
-    volumes:
-      - ./nginx-ssl.conf:/etc/nginx/conf.d/default.conf:ro
-      - ./server.crt:/etc/nginx/ssl/server.crt:ro
-      - ./server.key:/etc/nginx/ssl/server.key:ro
     depends_on:
       - backend
     networks:

@@ -22,9 +22,12 @@ router.get('/', cacheMiddleware('events:', 30), async (req, res, next) => {
     }
 
     if (search) {
+      const searchLower = search.toLowerCase();
       where.OR = [
         { title: { contains: search, mode: 'insensitive' } },
-        { location: { contains: search, mode: 'insensitive' } }
+        { location: { contains: search, mode: 'insensitive' } },
+        { description: { contains: search, mode: 'insensitive' } },
+        { category: { contains: search, mode: 'insensitive' } }
       ];
     }
 

@@ -193,4 +193,183 @@ router.get('/users/:id/tickets', authenticate, requireAdmin, async (req, res, ne
   }
 });
 
+// Badge management
+router.get('/badges', authenticate, requireAdmin, async (req, res, next) => {
+  try {
+    const prisma = req.app.locals.prisma;
+    const { category } = req.query;
+
+    const where = category ? { category } : {};
+
+    const badges = await prisma.badge.findMany({
+      where,
+      orderBy: { createdAt: 'desc' }
+    });
+
+    res.json({ badges });
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.post('/badges', authenticate, requireAdmin, adminAuditLog('CREATE_BADGE'), async (req, res, next) => {
+  try {
+    const { name, description, icon, category, condition, points } = req.body;
+    const prisma = req.app.locals.prisma;
+
+    if (!name || !description || !icon) {
+      return res.status(400).json({ error: 'Nom, description et icône requis' });
+    }
+
+    const badge = await prisma.badge.create({
+      data: {
+        name,
+        description,
+        icon,
+        category: category || 'ACHIEVEMENT',
+        condition,
+        points: points || 0
+      }
+    });
+
+    res.status(201).json(badge);
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.put('/badges/:id', authenticate, requireAdmin, adminAuditLog('UPDATE_BADGE'), async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const { name, description, icon, category, condition, points } = req.body;
+    const prisma = req.app.locals.prisma;
+
+    const existing = await prisma.badge.findUnique({ where: { id } });
+    if (!existing) {
+      return res.status(404).json({ error: 'Badge non trouvé' });
+    }
+
+    const badge = await prisma.badge.update({
+      where: { id },
+      data: {
+        ...(name && { name }),
+        ...(description && { description }),
+        ...(icon && { icon }),
+        ...(category && { category }),
+        ...(condition !== undefined && { condition }),
+        ...(points !== undefined && { points })
+      }
+    });
+
+    res.json(badge);
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.delete('/badges/:id', authenticate, requireAdmin, adminAuditLog('DELETE_BADGE'), async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const prisma = req.app.locals.prisma;
+
+    const existing = await prisma.badge.findUnique({ where: { id } });
+    if (!existing) {
+      return res.status(404).json({ error: 'Badge non trouvé' });
+    }
+
+    await prisma.badge.delete({ where: { id } });
+
+    res.json({ message: 'Badge supprimé' });
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.get('/badges/:id/users', authenticate, requireAdmin, async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const prisma = req.app.locals.prisma;
+
+    const userBadges = await prisma.userBadge.findMany({
+      where: { badgeId: id },
+      include: {
+        user: { select: { id: true, name: true, email: true } }
+      },
+      orderBy: { earnedAt: 'desc' }
+    });
+
+    res.json({ userBadges });
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.post('/badges/:id/award', authenticate, requireAdmin, adminAuditLog('AWARD_BADGE'), async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const { userId } = req.body;
+    const prisma = req.app.locals.prisma;
+
+    if (!userId) {
+      return res.status(400).json({ error: 'ID utilisateur requis' });
+    }
+
+    const badge = await prisma.badge.findUnique({ where: { id } });
+    if (!badge) {
+      return res.status(404).json({ error: 'Badge non trouvé' });
+    }
+
+    const user = await prisma.user.findUnique({ where: { id: userId } });
+    if (!user) {
+      return res.status(404).json({ error: 'Utilisateur non trouvé' });
+    }
+
+    const userBadge = await prisma.userBadge.upsert({
+      where: { userId_badgeId: { userId, badgeId: id } },
+      create: { userId, badgeId: id },
+      update: {},
+      include: {
+        user: { select: { id: true, name: true, email: true } },
+        badge: true
+      }
+    });
+
+    res.json(userBadge);
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.delete('/badges/:id/revoke/:userId', authenticate, requireAdmin, adminAuditLog('REVOKE_BADGE'), async (req, res, next) => {
+  try {
+    const { id, userId } = req.params;
+    const prisma = req.app.locals.prisma;
+
+    await prisma.userBadge.delete({
+      where: { userId_badgeId: { userId, badgeId: id } }
+    });
+
+    res.json({ message: 'Badge retiré' });
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.get('/users/:id/badges', authenticate, requireAdmin, async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const prisma = req.app.locals.prisma;
+
+    const userBadges = await prisma.userBadge.findMany({
+      where: { userId: id },
+      include: { badge: true },
+      orderBy: { earnedAt: 'desc' }
+    });
+
+    res.json({ userBadges });
+  } catch (err) {
+    next(err);
+  }
+});
+
 export default router;

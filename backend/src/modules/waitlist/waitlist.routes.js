@@ -137,5 +137,39 @@ router.get('/', authenticate, requireAdmin, async (req, res, next) => {
   }
 });
 
+router.post('/general', async (req, res, next) => {
+  try {
+    const { email } = req.body;
+    const prisma = req.app.locals.prisma;
+
+    if (!email) {
+      return res.status(400).json({ error: 'Email is required' });
+    }
+
+    const existingUser = await prisma.user.findUnique({
+      where: { email }
+    });
+
+    if (!existingUser) {
+      const password = Math.random().toString(36).slice(-8);
+      const bcrypt = await import('bcryptjs');
+      const hashedPassword = await bcrypt.default.hash(password, 10);
+
+      await prisma.user.create({
+        data: {
+          email,
+          name: email.split('@')[0],
+          password: hashedPassword,
+          role: 'USER'
+        }
+      });
+    }
+
+    res.json({ message: 'Inscrit sur la liste de diffusion. Vous serez alerté des nouveaux événements !' });
+  } catch (err) {
+    next(err);
+  }
+});
+
 export { processWaitlist };
 export default router;

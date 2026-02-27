@@ -4,6 +4,7 @@ import QRCode from 'qrcode';
 import { authenticate, requireAdmin } from '../../shared/middleware/auth.js';
 import { createPaymentIntent, stripe } from '../payment/payment.service.js';
 import { validate, createOrderSchema } from '../../shared/middleware/validation.js';
+import { sendOrderConfirmation } from '../notifications/email.service.js';
 
 const router = Router();
 
@@ -111,6 +112,8 @@ router.post('/:orderId/confirm', authenticate, async (req, res, next) => {
         data: { availableSeats: { decrement: order.quantity } }
       })
     ]);
+
+    sendOrderConfirmation(req.user, order, tickets).catch(console.error);
 
     res.json({
       order: { ...order, status: 'PAID', paymentId: mockPaymentId },
